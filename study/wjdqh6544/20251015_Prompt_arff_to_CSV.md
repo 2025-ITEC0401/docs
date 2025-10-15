@@ -1012,3 +1012,127 @@ y_true = labels_df[0]
 호환성 (Compatibility) 🤝: CSV 파일의 첫 번째 줄을 헤더로 사용하는 것은 거의 모든 데이터 분석 도구와 라이브러리(Pandas, R, Excel 등)의 표준적인 방식입니다. 이 표준을 따르면 다른 도구나 사람과 데이터를 공유할 때 발생할 수 있는 문제를 예방할 수 있습니다.
 
 결론적으로, 생성된 _labels.csv 파일은 그대로 두시면 됩니다. 열 이름을 제거하지 마세요. 그것이 나중의 분석 작업을 훨씬 더 쉽고 명확하게 만들어 줍니다.
+
+----
+### Question)
+```
+변환한 csv 를 입력하니까 아래와 같이 출력되네
+
+
+
+Traceback (most recent call last):
+
+  File "store_emb.py", line 92, in <module>
+
+    save_embeddings(args)
+
+  File "store_emb.py", line 37, in save_embeddings
+
+    train_set = get_dataset(args.data_path, 'train', args.input_len, args.output_len)
+
+  File "store_emb.py", line 33, in get_dataset
+
+    return dataset_class(flag=flag, size=[input_len, 0, output_len], data_path=data_path)
+
+  File "/hdd/intern/z_timeKD/data_provider/data_loader_save.py", line 242, in __init__
+
+    self.__read_data__()
+
+  File "/hdd/intern/z_timeKD/data_provider/data_loader_save.py", line 253, in __read_data__
+
+    cols.remove(self.target)
+
+ValueError: list.remove(x): x not in list
+
+```
+### Answer)
+이 에러는 TimeKD의 데이터 로더가 예측 대상이 되는 '타겟(target)' 열을 찾으려고 했지만, 우리가 만든 CSV 파일에 해당 이름의 열이 없어서 발생한 문제입니다.
+
+ValueError: list.remove(x): x not in list는 Python에서 리스트 안에 없는 항목 x를 삭제하려고 시도할 때 발생하는 에러입니다.
+
+## 🧐 에러의 원인: 모델과 데이터의 구조 불일치
+모델의 기대: store_emb.py 스크립트와 그 내부의 데이터 로더(data_loader_save.py)는 원래 **시계열 예측(Forecasting)**을 위해 만들어졌습니다. 이 때문에 스크립트는 기본적으로 'ETTh1'이나 'ETTm1' 같은 예측용 데이터셋을 처리하도록 설정되어 있습니다. 이 데이터셋들에는 예측해야 할 목표 변수가 있으며, 그 열의 이름은 보통 'OT' (Oil Temperature)입니다.
+
+데이터 로더의 동작: 에러가 발생한 코드를 보면 cols.remove(self.target)라는 부분이 있습니다.
+
+cols는 CSV 파일에서 읽어온 모든 열 이름의 리스트입니다 (예: ['date', 'OT_0', 'OT_1', ...]).
+
+self.target은 모델이 예측하려고 하는 목표 열의 이름으로, 기본값이 'OT'로 설정되어 있을 가능성이 매우 높습니다.
+
+이 코드는 전체 열 리스트(cols)에서 목표 열('OT')의 이름을 제거하여, 순수한 입력 데이터만 남기려는 의도를 가지고 있습니다.
+
+우리의 데이터: 하지만 우리가 만든 BasicMotions_for_TimeKD.csv 파일에는 'date', 'OT_0', 'OT_1', ..., 'OT_599'라는 열만 있을 뿐, 이름이 정확히 'OT'인 열은 존재하지 않습니다.
+
+결론적으로, 데이터 로더가 'OT'라는 이름의 열을 삭제하려고 했지만, 우리 파일에는 그런 열이 없어서 에러가 발생한 것입니다.
+
+## ✅ 해결 방법: CSV 파일 수정하기
+이 문제를 해결하는 가장 간단한 방법은, 우리가 생성하는 CSV 파일의 열 중 하나를 모델이 기대하는 이름인 'OT'로 바꿔주는 것입니다. 이렇게 하면 데이터 로더가 정상적으로 작동할 수 있습니다.
+
+이전 단계에서 TRAIN과 TEST 파일을 합치는 코드에서 마지막 데이터 열의 이름만 'OT'로 변경하면 됩니다.
+
+아래는 수정된 최종 병합 코드입니다.
+
+Python
+
+import pandas as pd
+
+def merge_ucr_datasets_for_timekd(dataset_prefix):
+    """
+    데이터셋 이름(접두사)을 받아 TRAIN/TEST CSV를 병합하고,
+    TimeKD 입력용 파일을 생성합니다. 레이블 열을 자동으로 감지하고,
+    마지막 데이터 열을 'OT'로 설정합니다.
+    """
+    try:
+        train_csv = f'{dataset_prefix}_TRAIN.csv'
+        test_csv = f'{dataset_prefix}_TEST.csv'
+        print(f"--- '{dataset_prefix}' 데이터셋 처리 시작 ---")
+        df_train = pd.read_csv(train_csv)
+        df_test = pd.read_csv(test_csv)
+
+        # 레이블 열 이름 자동 감지
+        label_column_name = df_train.select_dtypes(include=['object']).columns[0]
+        print(f"자동으로 감지된 레이블 열: '{label_column_name}'")
+
+        # 레이블 분리 및 저장
+        all_labels = pd.concat([df_train[label_column_name], df_test[label_column_name]], ignore_index=True)
+        all_labels.to_csv(f'{dataset_prefix}_labels.csv', index=False, header=[label_column_name])
+
+        # 데이터 합치기 (레이블 열 제외)
+        df_train = df_train.drop(columns=[label_column_name])
+        df_test = df_test.drop(columns=[label_column_name])
+        df_combined = pd.concat([df_train, df_test], ignore_index=True)
+
+        # 가짜 'date' 컬럼 추가
+        date_rng = pd.date_range(start='2023-01-01', periods=len(df_combined), freq='H')
+        df_combined.insert(0, 'date', date_rng)
+        
+        # --- (핵심 수정 부분) ---
+        # 데이터 컬럼 이름 변경 ('OT_0', 'OT_1', ... 그리고 마지막은 'OT')
+        num_data_cols = len(df_combined.columns) - 1 # 'date' 열 제외
+        
+        # OT_0 부터 OT_{n-1} 까지 이름 부여
+        data_columns = {col: f'OT_{i}' for i, col in enumerate(df_combined.columns[1:])}
+        df_combined = df_combined.rename(columns=data_columns)
+        
+        # 마지막 데이터 열의 이름을 'OT'로 변경
+        last_data_col_name = f'OT_{num_data_cols - 1}'
+        df_combined = df_combined.rename(columns={last_data_col_name: 'OT'})
+        # ------------------------
+
+        # 최종 파일 저장
+        output_filename = f'{dataset_prefix}_for_TimeKD.csv'
+        df_combined.to_csv(output_filename, index=False)
+        
+        print(f"✅ 성공! 최종 병합 파일 '{output_filename}'이 생성되었습니다.")
+        print("생성된 파일의 마지막 몇 개 열 이름:")
+        print(df_combined.columns[-5:]) # 마지막 5개 열 이름 확인
+
+    except Exception as e:
+        print(f"❌ 에러가 발생했습니다: {e}")
+
+
+# --- 사용 예시 ---
+# 이 함수에 데이터셋 이름만 전달하여 실행하면 됩니다.
+merge_ucr_datasets_for_timekd('BasicMotions')
+
+이 코드로 CSV 파일을 다시 생성한 뒤 store_emb.py 스크립트를 실행하면, 데이터 로더가 'OT' 열을 성공적으로 찾고 제거할 수 있으므로 에러 없이 임베딩 추출 과정이 진행될 것입니다.
