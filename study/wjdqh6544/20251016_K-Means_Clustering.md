@@ -160,3 +160,200 @@ Train 데이터에 왜 라벨 데이터가 있는거지?
 (사용자님의 현재 목표)사용 안 함
 (나중을 위해 따로 보관)최종 시험 채점용 정답지
 (클러스터링 성능 평가에 사용)결론적으로, Train 데이터에 라벨이 있는 것은 그 데이터셋이 원래 '지도 학습'을 염두에 두고 만들어졌기 때문입니다.사용자님은 그 데이터셋을 더 창의적인 방법인 '자기지도 학습'에 활용하고 있는 것이며, 이 경우 Train 라벨은 훈련이 아닌 최종 평가 단계에서만 그 가치를 발휘하게 됩니다. 즉, "나중에 내 임베딩이 Train 데이터도 잘 군집화하는지 확인해볼까?" 와 같은 추가적인 분석을 위해 보관해두는 것입니다.
+---
+### Question)
+```
+t-SNE 를 적용하려고 하는데,
+
+t-SNE 적용 후 K-Means 를 적용해야 하나?
+
+아니면 K-Means 를 먼저 적용하고 t-SNE를 적용해야 하나?
+```
+### Answer)
+명확한 결론부터 말씀드리면, K-Means를 먼저 적용한 후, 그 결과를 시각화하기 위해 t-SNE를 사용해야 합니다. 💡
+
+이유는 두 알고리즘의 목적이 근본적으로 다르기 때문입니다.
+
+K-Means: 데이터의 실제 구조를 분석하여 유사한 데이터끼리 묶는 군집화(Clustering) 알고리즘입니다. 모든 원본 특성(feature) 정보를 사용하여 데이터 포인트 간의 거리를 계산하고 최적의 클러스터를 찾습니다.
+
+t-SNE: 고차원 데이터를 사람이 보기 쉽게 2차원이나 3차원으로 축소하는 시각화(Visualization) 알고리즘입니다. 데이터의 전체적인 구조보다는 '이웃한 데이터는 변환 후에도 가깝게' 유지하는 데 중점을 둡니다.
+
+## 왜 K-Means를 먼저 적용해야 할까요?
+가장 중요한 이유는 정보의 손실 때문입니다.
+
+t-SNE는 시각화를 위해 고차원 데이터를 저차원으로 '압축'하는 과정에서 원본 데이터가 가진 거리 정보를 왜곡시킵니다. t-SNE 결과물에서 나타나는 점들 간의 거리나 군집의 크기는 실제 데이터의 구조를 그대로 반영하지 않습니다.
+
+만약 t-SNE를 먼저 적용하고 그 결과에 K-Means를 실행한다면, 이미 정보가 왜곡되고 손실된 '시각화용 그림'에 클러스터링을 하는 것과 같습니다. 이는 원본 데이터의 진짜 패턴이 아닌, t-SNE가 만들어낸 시각적 인공물(artifact)을 클러스터링하는 오류를 낳을 수 있습니다.
+
+## 올바른 분석 순서 (Standard Workflow)
+따라서 일반적인 분석 파이프라인은 다음과 같습니다.
+
+K-Means 적용: 원본 고차원 데이터에 K-Means 알고리즘을 적용하여 각 데이터 포인트가 어떤 클러스터에 속하는지 클러스터 레이블(label)을 부여합니다.
+
+t-SNE 적용: 동일한 원본 고차원 데이터에 t-SNE를 적용하여 2D 또는 3D 좌표를 얻습니다.
+
+결과 시각화: 2번에서 얻은 t-SNE 좌표로 산점도(scatter plot)를 그립니다. 이때, 각 점의 색상을 1번에서 얻은 K-Means 클러스터 레이블에 따라 다르게 지정합니다.
+
+이렇게 하면, **"K-Means가 원본 데이터에서 찾은 클러스터 구조가 시각적으로도 잘 분리되는가?"**를 명확하게 확인할 수 있습니다.
+
+잘못된 순서 ❌올바른 순서 ✅1. 데이터 → t-SNE (시각화용 데이터 생성)1. 데이터 → K-Means (클러스터 레이블 생성)2. 시각화용 데이터 → K-Means (왜곡된 데이터에 군집화)2. 데이터 → t-SNE (시각화용 좌표 생성)3. 시각화 (t-SNE 좌표 + K-Means 레이블)
+
+---
+### Question)
+```
+train, test 파일은 h5 파일로 구성되어 있음을 반영해줘.
+```
+### Answer)
+네, 문제없습니다. Train/Test 데이터가 CSV가 아닌 H5(HDF5) 파일 형식일 경우를 반영하여 코드를 수정해 드릴게요.
+
+데이터 로딩 부분만 바뀌고, K-Means 클러스터링을 적용하는 핵심 로직은 동일합니다. pandas는 H5 파일도 쉽게 읽을 수 있는 기능을 제공합니다.
+
+## H5 파일 처리를 위한 라이브러리 설치
+H5 파일을 pandas에서 사용하려면 tables 라이브러리가 필요합니다. 먼저 설치해주세요.
+
+Bash
+
+pip install tables
+## K-Means 클러스터링 코드 (H5 파일 입력)
+아래는 H5 파일을 입력으로 받아 K-Means 클러스터링을 수행하고 결과를 CSV로 저장하는 수정된 코드입니다.
+
+Python
+
+import pandas as pd
+import h5py
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import numpy as np
+
+# --- 1. 전역 변수로 클러스터 개수(K) 지정 ---
+N_CLUSTERS = 3 # 원하는 클러스터 개수로 변경 가능
+
+def find_h5_keys(filepath):
+    """HDF5 파일 내의 key 목록을 확인하는 함수"""
+    keys = []
+    with h5py.File(filepath, 'r') as f:
+        keys = list(f.keys())
+    return keys
+
+def run_kmeans_clustering_h5(train_filepath, test_filepath, output_filepath, h5_key):
+    """
+    H5 데이터를 입력받아 K-Means 클러스터링을 수행하고 결과를 CSV 파일로 저장하는 함수
+
+    Args:
+        train_filepath (str): 훈련 데이터 H5 파일 경로
+        test_filepath (str): 테스트 데이터 H5 파일 경로
+        output_filepath (str): 결과 저장 CSV 파일 경로
+        h5_key (str): H5 파일 내에서 데이터를 읽어올 key
+    """
+    try:
+        # --- 2. Train & Test H5 데이터셋 불러오기 ---
+        print(f"H5 파일에서 '{h5_key}' key를 사용하여 데이터를 불러옵니다...")
+        train_df = pd.read_hdf(train_filepath, key=h5_key)
+        test_df = pd.read_hdf(test_filepath, key=h5_key)
+        
+        print("훈련 데이터 (상위 5개):")
+        print(train_df.head())
+        print("\n테스트 데이터 (상위 5개):")
+        print(test_df.head())
+
+        # 클러스터링에 사용할 특성(feature) 선택 (모든 열을 사용한다고 가정)
+        features = train_df.columns
+        X_train = train_df[features]
+        X_test = test_df[features]
+
+        # --- 데이터 전처리 (표준화) ---
+        print("\n데이터 표준화를 진행합니다...")
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+
+        # --- 3. K-Means 모델 훈련 ---
+        print(f"\nK-Means 모델을 {N_CLUSTERS}개의 클러스터로 훈련합니다...")
+        kmeans = KMeans(n_clusters=N_CLUSTERS, random_state=42, n_init=10)
+        kmeans.fit(X_train_scaled)
+
+        # --- 4. Test 데이터에 클러스터 할당 ---
+        print("테스트 데이터에 클러스터를 예측(할당)합니다...")
+        test_clusters = kmeans.predict(X_test_scaled)
+
+        # --- 5. 결과를 원본 데이터에 추가 ---
+        results_df = test_df.copy()
+        results_df['cluster'] = test_clusters
+
+        print("\n클러스터링 결과 (상위 5개):")
+        print(results_df.head())
+        
+        # 각 클러스터에 속한 데이터 개수 확인
+        print("\n클러스터별 데이터 개수:")
+        print(results_df['cluster'].value_counts())
+
+        # --- 6. 결과를 CSV 파일로 저장 ---
+        results_df.to_csv(output_filepath, index=False, encoding='utf-8-sig')
+        print(f"\n결과가 '{output_filepath}' 파일로 성공적으로 저장되었습니다.")
+
+    except FileNotFoundError:
+        print("오류: 지정된 파일 경로를 찾을 수 없습니다. 경로를 확인해주세요.")
+    except KeyError:
+        print(f"오류: H5 파일에서 '{h5_key}' key를 찾을 수 없습니다. key를 확인해주세요.")
+        # 파일에 어떤 key가 있는지 확인하는 도움말을 제공합니다.
+        try:
+            print(f"'{train_filepath}' 파일에 존재하는 키 목록: {find_h5_keys(train_filepath)}")
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"오류가 발생했습니다: {e}")
+
+
+# --- 실행 부분 ---
+if __name__ == "__main__":
+    # 사용자 설정: 본인의 파일 경로와 H5 key에 맞게 수정해주세요.
+    TRAIN_DATA_PATH = 'train_data.h5'
+    TEST_DATA_PATH = 'test_data.h5'
+    OUTPUT_CSV_PATH = 'clustering_results_from_h5.csv'
+    
+    # HDF5 파일은 내부에 여러 데이터셋을 가질 수 있으며, 각 데이터셋은 'key'로 식별됩니다.
+    # 데이터를 저장할 때 사용한 key를 여기에 입력해야 합니다.
+    H5_DATA_KEY = 'df'  # 예: 'dataset', 'features', 'my_data' 등
+
+    # --- 예제용 더미 데이터 생성 (실제 사용 시에는 이 부분을 주석 처리) ---
+    print("예제용 더미 H5 파일을 생성합니다...")
+    np.random.seed(0)
+    # 훈련 데이터 생성 및 H5 파일로 저장
+    train_data = pd.DataFrame(np.random.rand(100, 2) * 10, columns=['feature1', 'feature2'])
+    train_data.to_hdf(TRAIN_DATA_PATH, key=H5_DATA_KEY, mode='w')
+    
+    # 테스트 데이터 생성 및 H5 파일로 저장
+    test_data = pd.DataFrame(np.random.rand(50, 2) * 10, columns=['feature1', 'feature2'])
+    test_data.to_hdf(TEST_DATA_PATH, key=H5_DATA_KEY, mode='w')
+    print("더미 파일 생성 완료.\n" + "="*30)
+    # -----------------------------------------------------------------
+
+    # K-Means 클러스터링 함수 실행
+    run_kmeans_clustering_h5(TRAIN_DATA_PATH, TEST_DATA_PATH, OUTPUT_CSV_PATH, H5_DATA_KEY)
+
+## 주요 변경 사항 및 사용법
+데이터 로딩 함수 변경:
+
+기존의 pd.read_csv()가 **pd.read_hdf()**로 변경되었습니다.
+
+key 파라미터 추가:
+
+HDF5 파일은 하나의 파일 안에 여러 데이터셋을 저장할 수 있는 구조입니다. 각 데이터셋은 고유한 key(이름)로 구분됩니다.
+
+pd.read_hdf()를 사용할 때는 반드시 어떤 데이터를 불러올지 지정하는 key 값을 알려줘야 합니다.
+
+코드 상단의 H5_DATA_KEY = 'df' 부분을 실제 H5 파일에 데이터를 저장할 때 사용한 key 값으로 수정해야 합니다.
+
+H5 Key 확인 방법:
+
+만약 본인의 H5 파일에 어떤 key가 있는지 모른다면, 코드를 실행했을 때 발생하는 KeyError 메시지에 존재하는 key 목록이 출력되도록 만들었습니다. 또는 아래의 간단한 코드로 직접 확인할 수 있습니다.
+
+Python
+
+import h5py
+
+# 확인할 파일 경로
+filepath = 'train_data.h5'
+
+with h5py.File(filepath, 'r') as f:
+    print(f"'{filepath}' 파일에 있는 키: {list(f.keys())}")
