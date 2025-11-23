@@ -554,3 +554,236 @@ Spectral Affinity, 스케일 파라미터 명시 필요
 **"Default를 썼다" (X) -> "RBF 커널을 썼고, 파라미터는 Default 값인 1.0을 썼다" (O)**
 
 이렇게 적으면 리뷰어가 더 이상 딴지를 걸지 못합니다.
+---
+### Question)
+```
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+import h5py
+import cudf
+import cupy as cp
+import cugraph
+from cuml.preprocessing import StandardScaler
+from cuml.manifold import UMAP
+from cuml.neighbors import NearestNeighbors
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+ROOT_DIR = './data'
+DATASET = ['BasicMotions', 'Epilepsy', 'HandMovementDirection', 'Libras']
+# OUTPUT_LEN_LIST = [24, 36, 48, 96, 192]
+OUTPUT_LEN_LIST = [24]
+TYPE = ['train', 'val']
+RES_DIR = './Result/csv'
+KEY = 'embeddings'
+N_NEIGHBORS = 15
+
+os.makedirs(RES_DIR, exist_ok=True)
+
+def visualize(scaled_data_gdf, title, output_path):
+    scaled_data_np = scaled_data_gdf.to_numpy()
+    reducer = UMAP(n_components=2, random_state=42)
+    embedding = reducer.fit_transform(scaled_data_np)
+    
+    plt.figure(figsize=(10, 8))
+    sns.scatterplot(
+        x=embedding[:, 0],
+        y=embedding[:, 1],
+        alpha=0.7
+    )
+    plt.title(f'UMAP Projection of {title}')
+    plt.xlabel('UMAP Dimension 1')
+    plt.ylabel('UAP Dimension 2')
+    plt.grid(True)
+    plt.savefig(output_path)
+    plt.close()
+
+def concatenation(h5_path, n_vars):
+    with h5py.File(h5_path, 'r') as f:
+        data_unrolled = f[KEY][:]
+        
+    num_samples = len(data_unrolled) // n_vars
+    embedding_dim = data_unrolled.shape[1]
+    
+    data_concatenated = data_unrolled.reshape(num_samples, n_vars * embedding_dim)
+    
+    return data_concatenated
+
+def run_kmeans(ds, train_file, test_file, output_file):
+    try:
+        match ds:
+            case 'BasicMotions':
+                var = 6
+            case 'Epilepsy':
+                var = 3
+            case 'HandMovementDirection':
+                var = 10
+            case 'Libras':
+                var = 2
+                
+        match ds:
+            case 'BasicMotions':
+                n_cluster = 4
+            case 'Epilepsy':
+                n_cluster = 4
+            case 'HandMovementDirection':
+                n_cluster = 4
+            case 'Libras':
+                n_cluster = 15
+        
+        train_data_concat = concatenation(train_file, n_vars=var)
+        val_data_concat = concatenation(test_file, n_vars=var)
+        
+        train_gdf_concat = cudf.DataFrame(train_data_concat)
+        val_gdf_concat = cudf.DataFrame(val_data_concat)
+        
+        scaler = StandardScaler()
+        scaler.fit(train_gdf_concat)
+        val_gdf_scaled = scaler.transform(val_gdf_concat)
+        
+        # visualize(val_gdf_scaled, f"{ds} Val data", f"./{ds}_val_gdf.png")
+        
+        knn_model = NearestNeighbors(n_neighbors=N_NEIGHBORS)
+        knn_model.fit(val_gdf_scaled)
+        
+        indices = knn_model.kneighbors(val_gdf_scaled, return_distance=False)
+
+        n_samples = val_gdf_scaled.shape[0]
+        
+        source = cp.repeat(cp.arange(n_samples, dtype='int32'), N_NEIGHBORS)
+
+        destination = indices.to_cupy().flatten().astype('int32')
+        
+        edges_df = cudf.DataFrame({
+            'source': source,
+            'destination': destination
+        })
+        
+        G = cugraph.Graph()
+        G.from_cudf_edgelist(edges_df, source='source', destination='destination', renumber=False)
+
+        result_df = cugraph.spectralBalancedCutClustering(
+            G,
+            num_clusters=n_cluster,
+            num_eigen_vects=n_cluster
+        )
+        
+        result_df = result_df.sort_values(by='vertex')        
+        predicted_lables_final = result_df['cluster'].to_numpy()
+
+        results_df = pd.DataFrame({'cluster': predicted_lables_final})
+        
+        results_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+        
+        print(f"Result Saved: {output_file}\n")
+    except KeyError:
+        print(f"Cannot find key in h5 file.\n")
+    except Exception as e:
+        print(f"ERROR: {e}")
+
+print("\n\n============= Clustering =============")
+
+idx = 1
+for ds in DATASET:
+    for output_len in OUTPUT_LEN_LIST:
+        h5_train_path = f"{ROOT_DIR}/{ds}_o{output_len}_{TYPE[0]}_consolidated.h5"
+        h5_test_path = f"{ROOT_DIR}/{ds}_o{output_len}_{TYPE[1]}_consolidated.h5"
+        
+        if not os.path.exists(h5_train_path):
+            print(f"({idx}/{len(DATASET) * len(OUTPUT_LEN_LIST)}) File not found: {h5_train_path}")
+            idx += 1
+            continue
+        
+        if not os.path.exists(h5_test_path):
+            print(f"({idx}/{len(DATASET) * len(OUTPUT_LEN_LIST)}) File not found: {h5_test_path}")
+            idx += 1
+            continue
+        
+        print(f"({idx}/{len(DATASET) * len(OUTPUT_LEN_LIST)}) Target: {ds}_o{output_len}\n")
+        idx += 1
+        
+        run_kmeans(ds, h5_train_path, h5_test_path, f"{RES_DIR}/{ds}_o{output_len}_spectral_res.csv")
+
+
+
+이러한 코드를 기준으로 값을 찾으면?
+```
+### Answer)
+제공해주신 코드를 분석해 보니, 앞서 이야기했던 **"RBF 커널(Default Gamma)"을 사용한 방식이 아닙니다.**
+
+이 코드는 **k-Nearest Neighbors (k-NN)** 방식을 사용하여 그래프를 먼저 구축하고, 이를 기반으로 Spectral Clustering(`cugraph.spectralBalancedCutClustering`)을 수행하고 있습니다.
+
+따라서 논문에 "RBF 커널을 썼다"고 쓰면 \*\*거짓(False)\*\*이 됩니다. 아래 분석 내용을 바탕으로 수정해야 합니다.
+
+-----
+
+### 1\. 코드 분석 결과 (Fact Check)
+
+  * **Affinity (유사도) 방식:** `k-Nearest Neighbors` (k-NN)
+      * **근거 코드:**
+        ```python
+        knn_model = NearestNeighbors(n_neighbors=N_NEIGHBORS) # k-NN 모델 사용
+        indices = knn_model.kneighbors(...)                   # 이웃 찾기
+        G.from_cudf_edgelist(...)                             # 이를 통해 그래프(G) 생성
+        ```
+  * **스케일 파라미터 (Scale Parameter):** 여기서는 $\gamma$(Gamma)가 아니라 \*\*이웃의 수 ($k$)\*\*가 파라미터입니다.
+      * **값:** **15**
+      * **근거 코드:** 상단 변수 선언부 `N_NEIGHBORS = 15`
+  * **전처리 표준:** Z-score Standardization
+      * **근거 코드:** `scaler = StandardScaler()`
+
+-----
+
+### 2\. 논문에 반영해야 할 정확한 문구
+
+리뷰어에게는 "RBF 커널 대신, 계산 효율성을 위해 **k-NN 그래프 기반의 Spectral Clustering**을 사용했다"고 말해야 정확합니다.
+
+#### [옵션 1: 국문 작성 예시]
+
+> "Spectral Clustering을 위한 유사도 그래프(Affinity Graph)는 **k-최근접 이웃(k-Nearest Neighbors, k-NN)** 방식을 사용하여 구축하였다. 이때 이웃의 수(Number of neighbors) **$k$는 15**로 설정하였으며, 이는 `cuML` 및 `cuGraph` 라이브러리를 활용하여 가속화하였다. 클러스터링 수행 전, 모든 임베딩 벡터에 대해 **StandardScaler**를 적용하여 정규화하였다."
+
+#### [옵션 2: 영문 작성 예시 (논문용)]
+
+> "To construct the affinity graph for Spectral Clustering, we utilized the **k-nearest neighbors (k-NN)** method instead of the full RBF kernel to ensure computational efficiency. The number of neighbors **$k$ was set to 15**. Specifically, we generated the graph using the `cuML` library and performed the spectral balanced cut using `cuGraph`. Prior to graph construction, **Z-score standardization** was applied to all feature vectors."
+
+-----
+
+### 3\. 요약: 리뷰어 대응 전략 수정
+
+아까 준비했던 "Default Gamma=1.0" 답변은 **폐기**하시고, 아래 내용으로 대응하셔야 합니다.
+
+  * **Affinity:** k-Nearest Neighbors (k-NN) based graph construction.
+  * **Scale Parameter:** Number of neighbors, **$k=15$**.
+  * **Preprocessing:** Z-score Standardization (using `StandardScaler`).
+
+이 코드는 GPU 가속(`cugraph`)을 위해 dense matrix(RBF 방식) 대신 sparse graph(k-NN 방식)를 만드는 아주 효율적인 접근법입니다. 이 점을 어필하시면 됩니다.
+
+---
+### Question)
+```
+	또한, Spectral 군집화를 위한 유사도 그래프는 k-최근접 이웃 방식을 사용하였으며, 이웃의 수 k는 15로 설정하였다.
+
+이렇게 쓰면 유사도와 스케일 파라미터가 모두 해결되나?
+```
+### Answer)
+네, **완벽하게 해결됩니다.**
+
+리뷰어는 보통 Spectral Clustering이라고 하면 "RBF 커널($\exp(-\gamma \|x-y\|^2)$)"을 떠올리기 때문에 "Affinity(커널 종류)가 뭐냐, 스케일($\gamma$)이 몇이냐"라고 물은 것입니다.
+
+하지만 작성자님은 **k-NN 그래프 방식**을 사용했으므로, 아래와 같이 매칭되어 답변이 종결됩니다.
+
+1.  **Affinity (유사도):** k-최근접 이웃 (k-NN) 방식
+2.  **Scale Parameter (스케일 파라미터):** 이웃의 수 ($k=15$)
+
+---
+
+### 논문에 그대로 쓸 수 있는 다듬어진 문장
+
+작성하신 문장도 좋지만, 조금 더 학술적인 느낌을 살려 **"이 $k$값이 바로 스케일 파라미터 역할을 한다"**는 뉘앙스를 풍기도록 다듬어 드립니다.
+
+> "Spectral Clustering을 위한 유사도 구조(Affinity Structure)는 **k-최근접 이웃(k-Nearest Neighbors, k-NN)** 그래프 방식을 채택하였으며, 이때 그래프의 연결성을 결정하는 **하이퍼파라미터(이웃의 수) $k$는 15로 설정**하였다."
+
+이렇게 적으시면 리뷰어의 요구사항(Affinity 명시, 파라미터 명시)을 정확히 방어한 것입니다.
