@@ -1532,3 +1532,433 @@ Setting Threshold... (Top 5.0%)
 2.  **패턴 시각화 (Pattern Visualization):** "탐지된 이상치들의 파형을 보니, 정상 데이터와 달리 급격한 스파이크(Spike)가 관찰되었습니다." (이것이 곧 성능 증명입니다.)
 
 만약 상사나 동료가 **"그래서 정확도가 몇 %야?"**라고 묻는다면, **"정답(Label)이 없는 데이터라 정확도 산출은 불가능하며, 대신 검출된 패턴의 유의미함을 시각적으로 검증했습니다"**라고 답변하는 것이 정석입니다.
+
+---
+### Question)
+```
+CSV 파일을 불러와서
+    
+    print("\n[Result]")
+    print(f"- The number of total validation data: {len(val_data)}")
+    print(f"- The number of found anormal data: {len(anomalies_idx)}")
+    print(f"- Anormal data ratio: {len(anomalies_idx) / len(val_data) * 100:.2f}%\n\n")
+
+이걸 수행하고 싶어.
+```
+### Answer)
+이미 저장된 CSV 파일에는 `is_anomaly`라는 컬럼(0 또는 1)이 있으므로, 이것을 활용하면 아주 간단하게 통계를 다시 뽑을 수 있습니다.
+
+원하시는 포맷 그대로 출력해 주는 **Python 코드**입니다.
+
+```python
+import pandas as pd
+import os
+
+# 분석할 CSV 파일 리스트 (필요한 파일명을 여기에 넣으세요)
+csv_files = [
+    'AtrialFibrillation_o24_anomaly_detection_threshold_0.05_res.csv',
+    'StandWalkJump_o24_anomaly_detection_threshold_0.05_res.csv'
+]
+
+print("========== Anomaly Detection Summary from CSV ==========\n")
+
+for file_path in csv_files:
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}\n")
+        continue
+        
+    # 1. CSV 불러오기
+    df = pd.read_csv(file_path)
+    
+    # 2. 통계 계산
+    # 전체 데이터 수 (len(val_data)와 동일)
+    total_count = len(df)
+    
+    # 이상치 개수 (len(anomalies_idx)와 동일)
+    # is_anomaly 컬럼이 1인 행의 개수를 셉니다
+    anomaly_count = len(df[df['is_anomaly'] == 1])
+    
+    # 비율 계산
+    ratio = (anomaly_count / total_count * 100) if total_count > 0 else 0
+    
+    # 3. 결과 출력
+    print(f"Target File: {file_path}")
+    print("\n[Result]")
+    print(f"- The number of total validation data: {total_count}")
+    print(f"- The number of found anormal data: {anomaly_count}")
+    print(f"- Anormal data ratio: {ratio:.2f}%\n\n")
+
+print("========================================================")
+```
+
+### 코드 사용법
+
+1.  `csv_files` 리스트 안에 통계를 보고 싶은 **CSV 파일 경로**를 넣고 실행하면 됩니다.
+2.  `is_anomaly` 컬럼이 **1**인 것만 골라서 `anomaly_count`를 계산하도록 작성했습니다.
+
+---
+### Question)
+```
+print 내용을 파일에 쓰려면?
+```
+### Answer)
+`print`로 화면에 출력되는 내용을 텍스트 파일(예: `summary_report.txt`)로 저장하려면, 파이썬의 `open()` 함수를 사용하여 파일을 열고 `write()`를 사용하면 됩니다.
+
+**화면 출력과 파일 저장을 동시에** 할 수 있도록 수정한 코드입니다.
+
+```python
+import pandas as pd
+import os
+
+# 분석할 CSV 파일 리스트
+csv_files = [
+    'AtrialFibrillation_o24_anomaly_detection_threshold_0.05_res.csv',
+    'StandWalkJump_o24_anomaly_detection_threshold_0.05_res.csv'
+]
+
+# 저장할 결과 리포트 파일명
+output_txt_file = "anomaly_detection_summary.txt"
+
+# 파일을 '쓰기 모드(w)'로 엽니다.
+with open(output_txt_file, "w", encoding="utf-8") as f:
+    
+    # [Tip] 화면과 파일 양쪽에 동시에 출력하는 헬퍼 함수
+    def log(message):
+        print(message)          # 콘솔 출력
+        f.write(message + "\n") # 파일 쓰기 (줄바꿈 \n 포함)
+
+    log("========== Anomaly Detection Summary from CSV ==========\n")
+
+    for file_path in csv_files:
+        if not os.path.exists(file_path):
+            log(f"File not found: {file_path}\n")
+            continue
+            
+        # 1. CSV 불러오기
+        df = pd.read_csv(file_path)
+        
+        # 2. 통계 계산
+        total_count = len(df)
+        anomaly_count = len(df[df['is_anomaly'] == 1])
+        ratio = (anomaly_count / total_count * 100) if total_count > 0 else 0
+        
+        # 3. 결과 출력 (log 함수 사용)
+        log(f"Target File: {file_path}")
+        log("[Result]")
+        log(f"- The number of total validation data: {total_count}")
+        log(f"- The number of found anormal data: {anomaly_count}")
+        log(f"- Anormal data ratio: {ratio:.2f}%\n")
+
+    log("========================================================")
+
+print(f"\n[완료] 결과가 '{output_txt_file}' 파일에 저장되었습니다.")
+```
+
+### 코드 설명
+
+1.  **`with open(..., "w") as f:`**: 파일을 쓰기 모드로 엽니다. 기존 내용이 있다면 지워지고 새로 씁니다. (추가하려면 `"a"` 모드 사용)
+2.  **`log(message)` 함수**:
+      * `print(message)`: 실행 화면에 보여줍니다.
+      * `f.write(message + "\n")`: 파일에 내용을 적습니다. `print`와 달리 줄바꿈(`\n`)을 자동으로 안 해주므로 직접 붙여야 합니다.
+
+이제 이 코드를 실행하면 화면에도 결과가 뜨고, 폴더에 `anomaly_detection_summary.txt`라는 파일도 생성됩니다.
+---
+### Question)
+```
+Threshold 값도 출력애햐 애
+```
+### Answer)
+```python?code_reference&code_event_index=2
+import pandas as pd
+import os
+
+# 분석할 CSV 파일 리스트
+csv_files = [
+    'AtrialFibrillation_o24_anomaly_detection_threshold_0.05_res.csv',
+    'StandWalkJump_o24_anomaly_detection_threshold_0.05_res.csv'
+]
+
+# 저장할 결과 리포트 파일명
+output_txt_file = "anomaly_detection_summary.txt"
+
+# 파일을 '쓰기 모드(w)'로 엽니다.
+with open(output_txt_file, "w", encoding="utf-8") as f:
+    
+    # [Tip] 화면과 파일 양쪽에 동시에 출력하는 헬퍼 함수
+    def log(message):
+        print(message)          # 콘솔 출력
+        f.write(message + "\n") # 파일 쓰기 (줄바꿈 \n 포함)
+
+    log("========== Anomaly Detection Summary from CSV ==========\n")
+
+    for file_path in csv_files:
+        if not os.path.exists(file_path):
+            log(f"File not found: {file_path}\n")
+            continue
+            
+        # 1. CSV 불러오기
+        df = pd.read_csv(file_path)
+        
+        # 2. 통계 계산
+        total_count = len(df)
+        anomaly_count = len(df[df['is_anomaly'] == 1])
+        ratio = (anomaly_count / total_count * 100) if total_count > 0 else 0
+        
+        # 3. Threshold 값 가져오기 (모든 행이 동일하므로 첫 번째 행에서 추출)
+        # 파일에 threshold_used 컬럼이 있다고 가정
+        if 'threshold_used' in df.columns:
+            threshold_val = df['threshold_used'].iloc[0]
+        else:
+            threshold_val = "N/A"
+        
+        # 4. 결과 출력 (log 함수 사용)
+        log(f"Target File: {file_path}")
+        log("[Result]")
+        log(f"- Threshold Score: {threshold_val:.4f}" if isinstance(threshold_val, float) else f"- Threshold Score: {threshold_val}")
+        log(f"- The number of total validation data: {total_count}")
+        log(f"- The number of found anormal data: {anomaly_count}")
+        log(f"- Anormal data ratio: {ratio:.2f}%\n")
+
+    log("========================================================")
+
+```
+
+```text?code_stdout&code_event_index=2
+========== Anomaly Detection Summary from CSV ==========
+
+Target File: AtrialFibrillation_o24_anomaly_detection_threshold_0.05_res.csv
+[Result]
+- Threshold Score: 0.0981
+- The number of total validation data: 1874
+- The number of found anormal data: 226
+- Anormal data ratio: 12.06%
+
+Target File: StandWalkJump_o24_anomaly_detection_threshold_0.05_res.csv
+[Result]
+- Threshold Score: 0.0960
+- The number of total validation data: 14908
+- The number of found anormal data: 915
+- Anormal data ratio: 6.14%
+
+========================================================
+
+```
+
+[file-tag: code-generated-file-0-1764558279585631747]
+
+네, CSV 파일 안에 있는 `threshold_used` 컬럼을 읽어서 함께 출력하도록 코드를 수정했습니다.
+
+아래 코드를 사용하시면 **화면 출력**과 \*\*파일 저장(`anomaly_detection_summary.txt`)\*\*이 동시에 되며, 요청하신 대로 **Threshold 값**도 포함됩니다.
+
+```python
+import pandas as pd
+import os
+
+# 1. 분석할 CSV 파일 리스트
+csv_files = [
+    'AtrialFibrillation_o24_anomaly_detection_threshold_0.05_res.csv',
+    'StandWalkJump_o24_anomaly_detection_threshold_0.05_res.csv'
+]
+
+# 2. 결과를 저장할 텍스트 파일명
+output_txt_file = "anomaly_detection_summary.txt"
+
+# 3. 파일을 열고(write 모드), 화면과 파일에 동시 출력하는 로직
+with open(output_txt_file, "w", encoding="utf-8") as f:
+    
+    # [Helper] 화면 출력 + 파일 저장을 동시에 하는 함수
+    def log(message):
+        print(message)          # 화면에 출력
+        f.write(message + "\n") # 파일에 쓰기 (줄바꿈 포함)
+
+    log("========== Anomaly Detection Summary from CSV ==========\n")
+
+    for file_path in csv_files:
+        # 파일 존재 여부 확인
+        if not os.path.exists(file_path):
+            log(f"File not found: {file_path}\n")
+            continue
+            
+        # (1) CSV 불러오기
+        df = pd.read_csv(file_path)
+        
+        # (2) 통계 계산
+        total_count = len(df)
+        anomaly_count = len(df[df['is_anomaly'] == 1])
+        ratio = (anomaly_count / total_count * 100) if total_count > 0 else 0
+        
+        # (3) Threshold 값 추출 (모든 행에 같은 값이 있으므로 첫 번째 행만 읽음)
+        if 'threshold_used' in df.columns:
+            threshold_val = df['threshold_used'].iloc[0]
+        else:
+            threshold_val = 0.0 # 컬럼이 없을 경우 대비
+        
+        # (4) 결과 리포팅
+        log(f"Target File: {file_path}")
+        log("[Result]")
+        log(f"- Threshold Score: {threshold_val:.4f}")  # <--- 추가된 부분
+        log(f"- The number of total validation data: {total_count}")
+        log(f"- The number of found anormal data: {anomaly_count}")
+        log(f"- Anormal data ratio: {ratio:.2f}%\n")
+
+    log("========================================================")
+
+print(f"\n[완료] 결과가 '{output_txt_file}' 파일에 저장되었습니다.")
+```
+
+### 실행 결과 (예시)
+
+이 코드를 실행하면 아래와 같이 나옵니다.
+
+```text
+========== Anomaly Detection Summary from CSV ==========
+
+Target File: AtrialFibrillation_o24_anomaly_detection_threshold_0.05_res.csv
+[Result]
+- Threshold Score: 0.0981
+- The number of total validation data: 1874
+- The number of found anormal data: 226
+- Anormal data ratio: 12.06%
+
+Target File: StandWalkJump_o24_anomaly_detection_threshold_0.05_res.csv
+[Result]
+- Threshold Score: 0.0960
+- The number of total validation data: 14908
+- The number of found anormal data: 915
+- Anormal data ratio: 6.14%
+
+========================================================
+```
+---
+### Question)
+```
+    # (A) 점수 분포 비교 (Histogram)
+    plt.subplot(2, 1, 1)
+    sns.histplot(train_scores, label='Train Scores (Baseline)', color='blue', alpha=0.3, kde=True)
+    sns.histplot(val_scores, label='Val Scores (Target)', color='orange', alpha=0.3, kde=True)
+    plt.axvline(threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold ({threshold:.2f})')
+    plt.title('Anomaly Score Distribution (Train vs Val)')
+    plt.xlabel('Anomaly Score (Higher = More Anomalous)')
+    plt.legend()
+
+    # (B) 시계열 흐름상 이상치 위치 (Val Data)
+    plt.subplot(2, 1, 2)
+    plt.plot(val_scores, label='Val Anomaly Score', color='black', alpha=0.7, linewidth=1)
+    plt.scatter(anomalies_idx, val_scores[anomalies_idx], color='red', s=30, label='Detected Anomaly', zorder=5)
+    plt.axhline(threshold, color='red', linestyle='--', alpha=0.5)
+    plt.title('Anomaly Detection Result on Validation Sequence')
+    plt.xlabel('Time Window Index')
+    plt.ylabel('Anomaly Score')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(res_fig_path)
+
+이 부분에 사용된 변수도 적절히 바꾸면?
+```
+### Answer)
+제공해주신 시각화 코드를 **CSV 파일을 읽어서 실행하는 구조**에 맞게 변수를 매핑해 드리겠습니다.
+
+**주의할 점:** CSV 파일에는 학습 당시의 `train_scores` 정보가 저장되어 있지 않습니다. 따라서 **(A) 히스토그램**에서는 `train_scores`를 제외하고 `val_scores`의 분포와 `threshold`만 그리는 것으로 코드를 수정해야 합니다.
+
+아래는 CSV 파일을 읽어 그래프를 그리고 저장하는 전체 코드입니다.
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+
+# 1. 분석할 CSV 파일 리스트
+csv_files = [
+    'AtrialFibrillation_o24_anomaly_detection_threshold_0.05_res.csv',
+    'StandWalkJump_o24_anomaly_detection_threshold_0.05_res.csv'
+]
+
+# 2. 파일별로 순회하며 그래프 그리기
+for file_path in csv_files:
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        continue
+        
+    # --- [데이터 준비] ---
+    df = pd.read_csv(file_path)
+    
+    # 변수 매핑 (DataFrame -> Numpy/Scalar)
+    val_scores = df['anomaly_score'].values
+    threshold = df['threshold_used'].iloc[0]
+    anomalies_idx = df.index[df['is_anomaly'] == 1].tolist()
+    
+    # 저장할 이미지 경로 생성 (.csv -> .png)
+    res_fig_path = file_path.replace('.csv', '_plot.png')
+
+    # --- [시각화 코드 적용] ---
+    plt.figure(figsize=(12, 10))
+
+    # (A) 점수 분포 비교 (Histogram)
+    # *주의: CSV에는 train_scores가 없으므로 val_scores 분포만 그립니다.
+    plt.subplot(2, 1, 1)
+    # sns.histplot(train_scores, label='Train Scores', color='blue', alpha=0.3, kde=True) # (데이터 없음)
+    sns.histplot(val_scores, label='Val Scores (Target)', color='orange', alpha=0.5, kde=True)
+    plt.axvline(threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold ({threshold:.4f})')
+    plt.title(f'Anomaly Score Distribution (File: {file_path})')
+    plt.xlabel('Anomaly Score (Higher = More Anomalous)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    # (B) 시계열 흐름상 이상치 위치 (Val Data)
+    plt.subplot(2, 1, 2)
+    plt.plot(val_scores, label='Val Anomaly Score', color='black', alpha=0.7, linewidth=1)
+    plt.scatter(anomalies_idx, val_scores[anomalies_idx], color='red', s=30, label='Detected Anomaly', zorder=5)
+    plt.axhline(threshold, color='red', linestyle='--', alpha=0.5, label='Threshold')
+    plt.title('Anomaly Detection Result on Validation Sequence')
+    plt.xlabel('Time Window Index')
+    plt.ylabel('Anomaly Score')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(res_fig_path)
+    plt.close() # 메모리 해제를 위해 플롯 닫기
+    
+    print(f"Graph saved: {res_fig_path}")
+
+print("\n[완료] 모든 그래프가 저장되었습니다.")
+```
+
+### 변경된 사항
+
+1.  **변수 생성:** `df['anomaly_score']`, `df['is_anomaly']` 등을 이용하여 `val_scores`, `anomalies_idx` 변수를 만들었습니다.
+2.  **Train Scores 제외:** CSV만으로는 학습 데이터의 점수 분포를 알 수 없으므로 `train_scores` 관련 플롯 라인은 주석 처리했습니다. (검증 데이터의 분포와 임계값 위치만 봐도 분석에는 충분합니다.)
+3.  **파일 저장:** 입력 CSV 파일명 뒤에 `_plot.png`를 붙여서 자동으로 저장되도록 했습니다.
+
+---
+### Question)
+```
+val_scores 이걸 어떻게 바꿔야 하는지 알려줘.
+```
+### Answer)
+`val_scores`는 CSV 파일의 **`anomaly_score`** 컬럼에 해당합니다.
+
+따라서 코드를 작성하실 때, CSV를 로드한 DataFrame(`df`)에서 해당 컬럼을 꺼내서 `val_scores` 변수에 담아주시면 됩니다.
+
+### 변경 방법 (코드)
+
+```python
+# 1. CSV 파일 읽기
+df = pd.read_csv(file_path)
+
+# 2. 변수 매핑 (여기서 바꿔줍니다!)
+val_scores = df['anomaly_score'].values  # DataFrame 컬럼 -> numpy array로 변환
+threshold = df['threshold_used'].iloc[0] # 임계값 가져오기
+anomalies_idx = df.index[df['is_anomaly'] == 1].tolist() # 이상치 인덱스 추출
+
+# 3. 그 이후 시각화 코드에서는 val_scores를 그대로 쓰시면 됩니다.
+plt.subplot(2, 1, 1)
+# sns.histplot(train_scores, ...)  <-- train_scores는 CSV에 없으므로 주석 처리하거나 삭제
+sns.histplot(val_scores, label='Val Scores (Target)', color='orange', alpha=0.5, kde=True)
+...
+```
+
+**핵심:**
+기존 코드의 `val_scores` 자리에 **`df['anomaly_score']`** (또는 `.values`를 붙인 것)를 대입한다고 생각하시면 됩니다.
