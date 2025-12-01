@@ -736,3 +736,313 @@ if __name__ == '__main__':
 3.  **`feat_dim`:** 사용하시는 데이터셋의 변수 개수(columns - 1, date 제외)와 맞는지 확인하세요. (ETTh1은 7개)
 
 이 파일 하나만 실행하면 학습부터 보간까지 완료됩니다.
+---
+### Question)
+```
+다른 작업 (이상탐지, Clustering) 은 원본 CSV 없이 임베딩 파일(H5) 만 사용하여 잘 구동되었는데, 결측치 보간은 무조건 CSV 필요하나?
+```
+### Answer)
+결론부터 말씀드리면, **"원래 값(시계열 숫자)을 복원"하는 것이 목적이라면 CSV(원본 데이터)가 100% 필수**입니다.
+
+하지만 **"임베딩 자체의 구멍만 메워서 다른 모델에 넘기는 것"이 목적이라면 CSV는 없어도 됩니다.**
+
+왜 다른 작업(이상탐지, Clustering)과 달리 Imputation(복원)에서만 CSV가 필요한지, 그 결정적인 이유를 설명해 드릴게요.
+
+---
+
+### 1. 왜 이상탐지/Clustering은 CSV가 없어도 됐나?
+이 작업들은 **"임베딩 공간(Latent Space) 내부의 관계"**만 보면 되기 때문입니다.
+
+* **Clustering:** 임베딩 벡터들끼리 거리가 가까운가? (A와 B가 비슷한가?) $\rightarrow$ **원본 값이 100인지 200인지는 몰라도 됨.** 그냥 벡터 각도만 보면 됨.
+* **이상탐지:** 이 임베딩이 평소 분포에서 벗어났는가? (정상 범위를 벗어난 벡터인가?) $\rightarrow$ **원본 값이 무엇이었는지는 몰라도, 튀는 놈인지만 알면 됨.**
+
+즉, **Output이 "판단(Label/Group)"**이기 때문에 입력인 임베딩만 있으면 됩니다.
+
+### 2. 왜 Imputation(값 복원)은 CSV가 필요한가?
+이 작업의 **Output이 "원래 값(Raw Value)"**이기 때문입니다.
+
+우리가 하려는 작업은 번역과 같습니다:
+> **임베딩(암호) $\rightarrow$ 디코더(번역기) $\rightarrow$ 원본 데이터(평문)**
+
+* **학습의 목표:** 디코더에게 "이 암호(임베딩)는 원래 이 숫자(원본)였어"라고 가르쳐야 합니다.
+* **문제점:** CSV가 없으면 **"정답지"**가 없는 셈입니다. 디코더가 숫자를 뱉어냈을 때, 그게 맞았는지 틀렸는지 채점(Loss 계산)을 할 수가 없습니다.
+
+> **비유:**
+> * **Clustering:** 외국어 책을 보고 "이건 로맨스 장르군" 하고 분류하는 것 (내용 해석 불필요).
+> * **Imputation:** 외국어 책을 보고 **"한국어로 번역"**해내는 것 (원문과 번역문의 매칭 정보 필수).
+
+---
+
+### 3. 만약 CSV가 절대 없다면? (대안)
+
+만약 원본 데이터가 유실되어서 **CSV를 구할 수 없는 상황**이라면, 목표를 바꿔야 합니다.
+
+#### 전략 A: Latent Imputation (임베딩 자체를 보간)
+원본 값(예: 온도 25도)을 복원하는 것을 포기하고, **"결측된 시점의 임베딩 벡터"**를 채워 넣는 방식입니다.
+
+* **방법:** 결측 시점의 임베딩이 비어있거나 0이라면, 앞뒤 시점의 임베딩 평균을 내거나, 주변 이웃 임베딩을 가져와 채웁니다.
+* **장점:** CSV 필요 없음. `.h5` 파일만 있으면 됨.
+* **단점:** 사람이 눈으로 볼 수 있는 시계열 그래프는 못 그림. (오직 다운스트림 모델 입력용으로만 사용 가능)
+
+#### 전략 B: Pre-trained Decoder 사용 (조건부 가능)
+만약 TimeKD 모델을 학습시킬 때, **Decoder(Generator)도 같이 학습시켜서 저장해 두었다면** CSV 없이도 복원이 가능합니다.
+* 하지만 보통 TimeKD 같은 Distillation 모델은 Encoder(추출기)만 저장하고 Decoder는 버리는 경우가 많습니다. 저장된 `.pth` 파일에 Decoder 가중치가 없다면 불가능합니다.
+
+---
+
+### ✅ 요약 및 추천
+
+작업의 **최종 목적**이 무엇인가요?
+
+1.  **"결측치가 채워진 엑셀(CSV) 파일을 만들어서 시각화도 하고 싶다."**
+    * $\rightarrow$ **CSV 필수입니다.** 위에서 드린 코드를 사용하세요.
+2.  **"그냥 결측치 처리해서 성능 좋은 분류/예측 모델을 돌리고 싶다. 원본 값은 안 봐도 된다."**
+    * $\rightarrow$ **CSV 없어도 됩니다.** 이 경우엔 "Latent Space Imputation"을 해야 하므로 코드가 완전히 달라집니다. (임베딩 벡터 사이의 평균값 등으로 채우기)
+
+현재 **"Denoising Autoencoder"**를 쓰겠다고 하셨으므로, 이는 **1번(복원)**에 해당하는 방법론입니다. 따라서 **CSV가 꼭 필요합니다.**
+
+---
+### Question)
+```
+그러면, 내가 첨부한 Loader 를 활용하면 되나?
+저 Loader 파일은 data_provider 폴더 안에 있어.
+```
+### Answer)
+네, 아주 좋습니다\! 첨부해주신 `data_loader_emb.py`가 이미 원본 데이터(`seq_x`)와 임베딩(`.h5`)을 매핑하는 경로 설정(`embed_path`)을 완벽하게 처리하고 있습니다.
+
+다만, 코드에 한 가지 \*\*수정이 필요한 부분(Blocker)\*\*이 있습니다.
+`Dataset_ETT_hour` 클래스의 `__getitem__`을 보면 다음과 같은 코드가 있습니다:
+
+```python
+if self.flag == "test":
+    return seq_x, seq_y  # <--- 문제 발생! 임베딩을 리턴하지 않음
+```
+
+Imputation은 Test Set에 대해서도 **임베딩을 입력받아 복원**해야 하므로, 이 부분이 막혀 있으면 안 됩니다.
+
+따라서, 기존 파일을 건드리지 않고 \*\*"상속(Inheritance)"\*\*을 통해 이 부분만 살짝 고쳐서 사용하는 **`run_imputation.py`** 코드를 작성해 드리겠습니다.
+
+-----
+
+### 파일 구조 가정
+
+```text
+project_folder/
+├── data_provider/
+│   ├── __init__.py
+│   └── data_loader_emb.py  <-- (첨부하신 파일)
+├── utils/
+│   └── ... (tools, timefeatures 등)
+├── run_imputation.py       <-- (지금 만들 실행 파일)
+└── data/                   <-- CSV 및 임베딩 데이터
+```
+
+### `run_imputation.py` 전체 코드
+
+이 코드를 프로젝트 루트 폴더에 만들고 실행하시면 됩니다.
+
+```python
+import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+import h5py
+from torch.utils.data import DataLoader
+
+# 1. 첨부하신 파일에서 Dataset 불러오기
+# (폴더 구조에 따라 경로는 수정하세요. 예: from data_provider.data_loader_emb ...)
+try:
+    from data_provider.data_loader_emb import Dataset_ETT_hour, Dataset_Custom
+except ImportError:
+    # 만약 같은 폴더에 있다면:
+    from data_loader_emb import Dataset_ETT_hour, Dataset_Custom
+
+# ==========================================
+# 2. Dataset Wrapper (상속을 통한 기능 확장)
+# ==========================================
+class ImputationDataset(Dataset_ETT_hour):
+    """
+    기존 Dataset_ETT_hour를 상속받아 Imputation 전용으로 수정
+    1. Test 모드에서도 임베딩을 리턴하도록 수정
+    2. NaN Mask 생성 로직 추가
+    """
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        
+        # 부모 클래스의 데이터 로드 로직 활용
+        seq_x = self.data_x[s_begin:s_end]
+        
+        # ---------------------------------------------------------
+        # [수정] Flag가 test여도 무조건 임베딩을 로드하도록 직접 구현
+        # ---------------------------------------------------------
+        embeddings_stack = []
+        file_path = os.path.join(self.embed_path, f"{index}.h5")
+        
+        if os.path.exists(file_path):
+            with h5py.File(file_path, 'r') as hf:
+                data = hf['embeddings'][:]
+                tensor = torch.from_numpy(data)
+                # 데이터 형태에 따라 Squeeze 처리 (기존 코드 로직 유지)
+                embeddings_stack.append(tensor.squeeze(0))
+        else:
+            # 파일이 없는 경우 (예외처리 혹은 0으로 채움)
+            # 학습 중단 방지를 위해 0 텐서 반환 (사이즈 확인 필요)
+            # 여기서는 에러를 띄워서 데이터 누락을 확인하는 것을 권장
+            raise FileNotFoundError(f"Embedding file missing: {file_path}")
+
+        # 기존 코드의 stack/pad 로직
+        embeddings = torch.stack(embeddings_stack, dim=-1) # (Seq, Dim) 가정
+        if embeddings.dim() == 3 and embeddings.shape[-1] == 1:
+            embeddings = embeddings.squeeze(-1) # (Seq, Dim) 형태로 맞춤
+
+        # ---------------------------------------------------------
+        # [추가] Imputation을 위한 전처리
+        # ---------------------------------------------------------
+        seq_x_tensor = torch.FloatTensor(seq_x)
+        
+        # 1. Mask 생성: 원래 값이 있으면 1, NaN이면 0
+        # (주의: StandardScaler가 NaN을 0으로 이미 바꿨다면 이 로직 수정 필요)
+        # 만약 data_loader 내부에서 fillna(0)이 안 된 상태라면:
+        mask = ~torch.isnan(seq_x_tensor)
+        
+        # 2. Target 생성: NaN을 0으로 치환 (Loss 계산 오류 방지)
+        target = torch.nan_to_num(seq_x_tensor, nan=0.0)
+        
+        return embeddings.float(), target.float(), mask.float()
+
+# ==========================================
+# 3. Model (Decoder)
+# ==========================================
+class ReconstructionModel(nn.Module):
+    def __init__(self, emb_dim, seq_len, output_dim):
+        super(ReconstructionModel, self).__init__()
+        self.seq_len = seq_len
+        self.output_dim = output_dim
+        
+        # 임베딩(Seq, Emb_Dim) -> 원본(Seq, Feat_Dim)
+        # 구조는 간단한 MLP로 시작하여 필요시 LSTM/Transformer로 고도화 추천
+        self.projection = nn.Sequential(
+            nn.Linear(emb_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 512),
+            nn.ReLU(),
+            nn.Linear(512, output_dim)
+        )
+        
+    def forward(self, x):
+        # x: (Batch, Seq_Len, Emb_Dim)
+        output = self.projection(x) # (Batch, Seq_Len, Output_Dim)
+        return output
+
+# ==========================================
+# 4. Main Execution
+# ==========================================
+def main():
+    # --- Hyperparameters ---
+    args = {
+        'root_path': './data/',      
+        'data_path': 'ETTh1',    
+        'seq_len': 96,           # TimeKD 학습시 설정값 (필수 일치)
+        'pred_len': 96,          # TimeKD 학습시 설정값 (필수 일치)
+        'flag': 'train',
+        'features': 'M',
+        'batch_size': 32,
+        'lr': 0.001,
+        'epochs': 10,
+        'device': 'cuda' if torch.cuda.is_available() else 'cpu'
+    }
+
+    print("Loading Dataset...")
+    # 커스텀 데이터셋 로드
+    dataset = ImputationDataset(
+        root_path=args['root_path'],
+        data_path=args['data_path'],
+        flag=args['flag'],
+        size=[args['seq_len'], 24, args['pred_len']], # label_len은 dummy
+        features=args['features'],
+        target='OT',
+        scale=True
+    )
+    
+    loader = DataLoader(dataset, batch_size=args['batch_size'], shuffle=True)
+    
+    # 데이터 차원 확인
+    sample_emb, sample_y, _ = next(iter(loader))
+    print(f"Embedding Shape: {sample_emb.shape}") # (Batch, Seq, Emb_Dim)
+    print(f"Target Shape: {sample_y.shape}")       # (Batch, Seq, Feat_Dim)
+    
+    emb_dim = sample_emb.shape[-1]
+    feat_dim = sample_y.shape[-1]
+    
+    # 모델 초기화
+    model = ReconstructionModel(emb_dim, args['seq_len'], feat_dim).to(args['device'])
+    optimizer = optim.Adam(model.parameters(), lr=args['lr'])
+    criterion = nn.MSELoss(reduction='none') # Masked Loss를 위해 none
+
+    # --- Training Loop ---
+    print("Start Training...")
+    model.train()
+    for epoch in range(args['epochs']):
+        total_loss = 0
+        for emb, target, mask in loader:
+            emb = emb.to(args['device'])
+            target = target.to(args['device'])
+            mask = mask.to(args['device'])
+            
+            # Denoising: 임베딩에 노이즈 주입
+            noise = torch.randn_like(emb) * 0.05
+            noisy_emb = emb + noise
+            
+            # Forward
+            recon = model(noisy_emb)
+            
+            # Masked Loss Calculation
+            # mask=1 인 부분(관측된 값)만 오차 계산
+            loss = criterion(recon, target)
+            loss = (loss * mask).sum() / (mask.sum() + 1e-8)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            total_loss += loss.item()
+            
+        print(f"Epoch [{epoch+1}/{args['epochs']}] Loss: {total_loss/len(loader):.6f}")
+
+    # --- Inference & Imputation ---
+    print("Training Complete. Running Inference on Sample...")
+    model.eval()
+    with torch.no_grad():
+        emb, target, mask = next(iter(loader)) # 테스트용으로 첫 배치만
+        emb = emb.to(args['device'])
+        
+        recon = model(emb) # 노이즈 없이 추론
+        
+        # Imputation Logic:
+        # 원래 값이 있으면(Mask=1) 원래 값 사용, 없으면(Mask=0) 예측 값 사용
+        imputed_data = target.to(args['device']) * mask.to(args['device']) + \
+                       recon * (1 - mask.to(args['device']))
+        
+        # 역정규화 (Inverse Transform)
+        # 배치 중 첫 번째 샘플만 가져와서 변환
+        imputed_np = imputed_data[0].cpu().numpy()
+        original_restored = dataset.inverse_transform(imputed_np)
+        
+        print("\n[Sample Result - First Row]")
+        print("Restored Data (Original Scale):", original_restored[0])
+
+if __name__ == "__main__":
+    main()
+```
+
+### 💡 중요 체크포인트 (실행 전 확인)
+
+1.  **`utils` 폴더 처리:**
+      * `Dataset_ETT_hour` 내부에서 `from utils.tools import StandardScaler`를 하고 있습니다.
+      * `run_imputation.py`를 실행하는 위치에서 `utils` 폴더가 import 가능한 경로에 있어야 합니다.
+2.  **`StandardScaler`와 NaN:**
+      * 현재 `data_loader_emb.py`는 `__read_data__`에서 `self.scaler.fit(train_data.values)`를 호출합니다.
+      * 만약 CSV 원본(`ETTh1.csv`)에 \*\*결측치(NaN)\*\*가 포함되어 있다면, `StandardScaler`가 평균을 계산하다가 `NaN`을 뱉을 수 있습니다.
+      * **해결책:** `utils/tools.py` 파일을 열어서 `np.mean`을 \*\*`np.nanmean`\*\*으로, `np.std`를 \*\*`np.nanstd`\*\*로 바꿔주시면 안전합니다.

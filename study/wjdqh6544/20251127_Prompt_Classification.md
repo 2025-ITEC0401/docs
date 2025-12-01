@@ -300,3 +300,339 @@ print(f"Result Saved: {output_file}\n")
 1.  **새로 코드를 짤 필요 없음:** 현재 K-Means 코드가 `fit`(학습) -\> `predict`(분류) 과정을 모두 수행 중입니다.
 2.  **현재 방식 유지:** 모델 저장 없이 매번 `fit` 하고 `predict` 하는 방식도 데이터 분포가 크게 변하지 않는다면 문제없습니다.
 3.  **성능 확인:** 정답지 대신 `silhouette_score`를 추가하여, 매 실행 시 분류가 잘 되었는지 수치로 확인하세요.
+
+---
+### Question)
+```
+clustering_k-means/spectral 로 군집화를 진행하고 clustering_save_figure 로 tSNE 그래프를 그렸는데
+
+
+
+(11/12) Dataset: UWaveGestureLibrary, Output: 24, Method: kmeans... [2025-12-01 21:59:55.577] [CUML] [warning] # of Nearest Neighbors should be at least 3 * perplexity. Your results might be a bit strange...
+
+Completed.
+
+(12/12) Dataset: UWaveGestureLibrary, Output: 24, Method: spectral... [2025-12-01 22:00:00.755] [CUML] [warning] # of Nearest Neighbors should be at least 3 * perplexity. Your results might be a bit strange...
+
+Completed.
+
+
+
+이게 뜨네. 뭐지? [코드 첨부]
+```
+### Answer)
+이 경고 메시지는 **t-SNE 시각화를 할 때 데이터 개수가 너무 적어서** 발생하는 문제입니다.
+
+구체적으로 말씀드리면, **UWaveGestureLibrary 데이터셋의 Validation 데이터 개수**가 t-SNE 알고리즘의 기본 설정값인 \*\*`perplexity` (기본값 30)\*\*를 감당하기에 너무 적기 때문입니다.
+
+-----
+
+### 1\. 원인 분석
+
+  * **경고 내용:** `# of Nearest Neighbors should be at least 3 * perplexity`
+      * RAPIDS cuML의 t-SNE 구현체는 데이터 개수($N$)가 `perplexity` 값의 3배보다 커야 안정적으로 동작합니다. ($N > 3 \times P$)
+      * t-SNE는 기본적으로 `perplexity=30`을 사용하므로, 데이터가 최소 **90개 이상**이어야 합니다.
+  * **상황:**
+      * `UWaveGestureLibrary`는 데이터셋 크기가 다른 데이터셋에 비해 작거나, Validation Set으로 나눴을 때 샘플 수가 90개 미만인 것으로 보입니다.
+      * 데이터가 너무 적은데 주변 90개(3 \* 30)의 이웃을 찾으려고 하니 "결과가 이상할 수 있다(Your results might be a bit strange)"라고 경고하는 것입니다.
+
+### 2\. 해결 방법 (코드 수정)
+
+`clustering_save_figure.py` 파일에서 `TSNE` 객체를 생성할 때, 데이터 개수에 맞춰 **`perplexity` 값을 동적으로 조절**해주면 해결됩니다.
+
+**수정 전 (기존 코드):**
+
+```python
+reducer = TSNE(n_components=2, random_state=42)
+embedding_2d = reducer.fit_transform(features_val_scaled)
+```
+
+**수정 후 (제안 코드):**
+데이터 개수(`n_samples`)를 확인하고, 너무 적으면 `perplexity`를 낮추는 로직을 추가합니다.
+
+```python
+# ... (위쪽 코드 생략)
+
+scaler = StandardScaler()
+scaler.fit(features_train_concat)
+features_val_scaled = scaler.transform(features_val_concat)
+
+# === [수정 부분 시작] ===
+n_samples = features_val_scaled.shape[0]
+perplexity_val = 30.0  # 기본값
+
+# 데이터가 너무 적을 경우 perplexity 자동 조절 (n_samples / 3 보다 작게 설정)
+if n_samples < 3 * perplexity_val:
+    perplexity_val = max(5.0, n_samples / 3.0 - 1.0) # 최소 5는 유지
+    print(f"  [Info] Small dataset ({n_samples} samples). Adjusting perplexity to {perplexity_val:.1f}")
+
+reducer = TSNE(n_components=2, perplexity=perplexity_val, random_state=42)
+# === [수정 부분 끝] ===
+
+embedding_2d = reducer.fit_transform(features_val_scaled)
+
+if hasattr(embedding_2d, 'get'):
+# ... (아래 코드 동일)
+```
+
+### 3\. 요약
+
+1.  **무시해도 되나요?** 치명적인 에러는 아니지만, 시각화 결과(점들의 분포)가 뭉개지거나 이상하게 나올 수 있습니다. 수정하는 것이 좋습니다.
+2.  **왜 이 데이터셋만?** `UWaveGestureLibrary`의 `val` 데이터 개수가 90개보다 적어서 그렇습니다.
+3.  **조치:** 위 코드를 `clustering_save_figure.py`에 적용하면 경고가 사라지고 시각화도 정상적으로 수행될 것입니다.
+
+---
+### Question)
+```
+클러스터링 결과와 tSNE 그래프에 그려진 좌표 정보를 담은 CSV 인데, 데이터가 적은 것 같지는 않은데?
+
+그래프 그릴 때 사용한 코드 첨부함.
+```
+### Answer)
+이 경고 메시지는 **t-SNE 시각화를 할 때 데이터 개수가 너무 적어서** 발생하는 문제입니다.
+
+구체적으로 말씀드리면, **UWaveGestureLibrary 데이터셋의 Validation 데이터 개수**가 t-SNE 알고리즘의 기본 설정값인 \*\*`perplexity` (기본값 30)\*\*를 감당하기에 너무 적기 때문입니다.
+
+-----
+
+### 1\. 원인 분석
+
+  * **경고 내용:** `# of Nearest Neighbors should be at least 3 * perplexity`
+      * RAPIDS cuML의 t-SNE 구현체는 데이터 개수($N$)가 `perplexity` 값의 3배보다 커야 안정적으로 동작합니다. ($N > 3 \times P$)
+      * t-SNE는 기본적으로 `perplexity=30`을 사용하므로, 데이터가 최소 **90개 이상**이어야 합니다.
+  * **상황:**
+      * `UWaveGestureLibrary`는 데이터셋 크기가 다른 데이터셋에 비해 작거나, Validation Set으로 나눴을 때 샘플 수가 90개 미만인 것으로 보입니다.
+      * 데이터가 너무 적은데 주변 90개(3 \* 30)의 이웃을 찾으려고 하니 "결과가 이상할 수 있다(Your results might be a bit strange)"라고 경고하는 것입니다.
+
+### 2\. 해결 방법 (코드 수정)
+
+`clustering_save_figure.py` 파일에서 `TSNE` 객체를 생성할 때, 데이터 개수에 맞춰 **`perplexity` 값을 동적으로 조절**해주면 해결됩니다.
+
+**수정 전 (기존 코드):**
+
+```python
+reducer = TSNE(n_components=2, random_state=42)
+embedding_2d = reducer.fit_transform(features_val_scaled)
+```
+
+**수정 후 (제안 코드):**
+데이터 개수(`n_samples`)를 확인하고, 너무 적으면 `perplexity`를 낮추는 로직을 추가합니다.
+
+```python
+# ... (위쪽 코드 생략)
+
+scaler = StandardScaler()
+scaler.fit(features_train_concat)
+features_val_scaled = scaler.transform(features_val_concat)
+
+# === [수정 부분 시작] ===
+n_samples = features_val_scaled.shape[0]
+perplexity_val = 30.0  # 기본값
+
+# 데이터가 너무 적을 경우 perplexity 자동 조절 (n_samples / 3 보다 작게 설정)
+if n_samples < 3 * perplexity_val:
+    perplexity_val = max(5.0, n_samples / 3.0 - 1.0) # 최소 5는 유지
+    print(f"  [Info] Small dataset ({n_samples} samples). Adjusting perplexity to {perplexity_val:.1f}")
+
+reducer = TSNE(n_components=2, perplexity=perplexity_val, random_state=42)
+# === [수정 부분 끝] ===
+
+embedding_2d = reducer.fit_transform(features_val_scaled)
+
+if hasattr(embedding_2d, 'get'):
+# ... (아래 코드 동일)
+```
+
+### 3\. 요약
+
+1.  **무시해도 되나요?** 치명적인 에러는 아니지만, 시각화 결과(점들의 분포)가 뭉개지거나 이상하게 나올 수 있습니다. 수정하는 것이 좋습니다.
+2.  **왜 이 데이터셋만?** `UWaveGestureLibrary`의 `val` 데이터 개수가 90개보다 적어서 그렇습니다.
+3.  **조치:** 위 코드를 `clustering_save_figure.py`에 적용하면 경고가 사라지고 시각화도 정상적으로 수행될 것입니다.
+
+---
+### Qusetion)
+```
+눈으로 봤을 때 문제없으면 괜찮은거지?
+```
+### Answer)
+네, **결론부터 말씀드리면 괜찮습니다.**
+
+특히 지금 뜬 경고는 **"데이터 분석(Clustering)"** 단계가 아니라, 결과를 보여주는 **"시각화(t-SNE)"** 단계에서 발생한 것이기 때문에, **데이터 자체나 클러스터링 결과(CSV)의 신뢰도에는 전혀 영향을 주지 않습니다.**
+
+쉽게 비유하자면 다음과 같습니다.
+
+* **Clustering (K-Means/Spectral):** 수학 문제를 푸는 과정 (이미 잘 풀었습니다.)
+* **t-SNE (시각화):** 푼 문제를 칠판에 그려서 보여주는 과정
+* **경고 메시지:** "칠판이 좀 미끄러워서 그림이 아주 정밀하게는 안 그려질 수도 있어."
+* **사용자님의 확인:** "눈으로 봤을 때 그림이 잘 그려져 있네?"
+* **결론:** 그럼 된 겁니다. 굳이 칠판을 바꿀(코드를 고칠) 필요는 없습니다.
+
+---
+
+### ✅ "눈으로 봤을 때 문제없다"의 기준
+t-SNE 그래프를 보셨을 때 아래 두 가지가 확인된다면, 기술적인 경고는 무시하셔도 됩니다.
+
+1.  **군집 간 분리:** 같은 색깔(Cluster)의 점들끼리 잘 뭉쳐 있고, 다른 색깔의 점들과는 떨어져 있는가?
+2.  **구조적 패턴:** 점들이 무작위 노이즈처럼 흩뿌려져 있지 않고, 어떤 덩어리(Blob) 형태를 이루고 있는가?
+
+이 두 가지가 보인다면 t-SNE가 **"고차원 데이터의 특징을 2차원으로 잘 압축해서 보여준 것"**이므로 성공입니다.
+
+### 💡 그래도 알면 좋은 팁 (논문/보고서용)
+지금은 "결과 확인용"이므로 괜찮지만, 만약 이 그래프를 **논문이나 공식 보고서**에 실어야 한다면, 아까 말씀드린 `n_neighbors` 옵션을 추가해서 경고를 없애고 다시 그리는 것이 좋습니다.
+
+* **이유:** "경고가 뜬 상태에서 그린 그래프"라고 하면 신뢰도를 공격받을 수 있기 때문입니다.
+* **현재:** 단순히 본인 확인용이므로 **PASS**하셔도 됩니다.
+
+**이제 시각화로 "데이터가 잘 나뉘는 것"을 확인하셨으니, 생성된 라벨(CSV)을 믿고 다음 단계(분류 모델 학습 등)로 넘어가셔도 좋습니다.**
+
+---
+### Question)
+```
+아까 질문으로 돌아가서, Classification task는 따로 구현할 필요 없나?
+```
+### Answer)
+결론부터 말씀드리면, **"지금 단계에서는 따로 구현할 필요가 없습니다."**
+
+사용자님이 이미 구현하신 **Clustering(K-Means)** 모델 자체가 학습이 끝나면(`fit`), 그 즉시 **Classification(분류기)** 역할을 할 수 있기 때문입니다.
+
+이게 왜 가능한지, 그리고 언제 **따로 구현해야 하는지** 명확하게 구분해 드릴게요.
+
+-----
+
+### 1\. 왜 따로 구현할 필요가 없는가?
+
+\*\*"학습된 K-Means = 거리 기반 분류기"\*\*이기 때문입니다.
+
+Classification 모델을 따로 짠다는 것은 보통 `RandomForest`나 `XGBoost` 같은 알고리즘을 가져와서 학습시킨다는 뜻인데, K-Means도 `predict()` 함수를 호출하는 순간 똑같은 기능을 수행합니다.
+
+  * **일반 Classification:** "데이터 $X$가 들어오면, $Y$(라벨)를 뱉어라."
+  * **학습된 K-Means:** "데이터 $X$가 들어오면, 가장 가까운 중심점(Centroid)을 찾아서 그 번호(Cluster ID)를 뱉어라."
+
+즉, **Cluster ID를 라벨(Class)로 간주**하기만 하면, 지금 코드 그대로 분류 시스템으로 쓸 수 있습니다.
+
+### 2\. 현재 코드를 '분류기'로 쓰기 위한 수정 (필수)
+
+지금 코드는 실행할 때마다 모델이 사라집니다. 이를 "분류기"로 쓰려면 **학습된 모델(중심점 위치)을 파일로 저장**해야 합니다.
+
+`clustering_k-means.py` 파일에서 `fit` 직후에 모델을 저장하는 코드만 추가하세요.
+
+```python
+import pickle
+
+# ... (기존 코드)
+kmeans_gpu.fit(train_gdf_scaled)
+
+# [추가] 학습된 모델(분류기) 저장
+# 나중에 이 파일만 있으면 언제든 분류가 가능해집니다.
+model_path = f"{RES_DIR}/{ds}_kmeans_classifier.pkl"
+with open(model_path, 'wb') as f:
+    pickle.dump(kmeans_gpu, f)
+print(f"Model saved to {model_path}")
+
+# ... (기존 코드)
+```
+
+**나중에 써먹을 때 (Inference):**
+
+```python
+# 저장된 모델만 불러오면 바로 분류기입니다.
+with open('ArticularyWordRecognition_kmeans_classifier.pkl', 'rb') as f:
+    loaded_model = pickle.load(f)
+
+# 새로운 데이터가 들어오면 바로 라벨(0, 1, 2...)을 맞춥니다.
+prediction = loaded_model.predict(new_data_scaled)
+```
+
+-----
+
+### 3\. 그렇다면, Classification을 "따로 짜야 하는" 상황은?
+
+지금은 필요 없지만, 다음 두 가지 경우에는 \*\*별도의 Classification 모델(XGBoost, MLP 등)\*\*을 짜야 합니다.
+
+#### 경우 A: K-Means의 성능 한계가 느껴질 때
+
+  * **상황:** K-Means는 단순하게 \*\*"거리가 가까운 놈"\*\*을 찾습니다. (동그라미 모양으로만 분류함)
+  * **문제:** 하지만 데이터 분포가 **초승달 모양**이나 **도넛 모양**처럼 복잡하게 얽혀 있다면, K-Means는 이를 제대로 분류하지 못합니다.
+  * **해결:** 이때는 K-Means로 만든 라벨(CSV)을 정답지 삼아, 결정 경계를 더 유연하게 그리는 **XGBoost**나 **Deep Learning Classifier**를 따로 학습시켜야 성능이 오릅니다.
+
+#### 경우 B: 추론 속도와 메모리가 중요할 때
+
+  * **상황:** K-Means는 분류할 때 모든 중심점과의 거리를 계산해야 합니다. (데이터가 엄청 많으면 느려질 수 있음)
+  * **해결:** `Decision Tree` 같은 가벼운 모델을 따로 학습시키면, `if-else` 몇 번만으로 분류가 끝나므로 속도가 훨씬 빨라집니다.
+
+-----
+
+### 💡 결론 및 추천
+
+사용자님은 현재 **임베딩 추출 -\> 클러스터링 -\> 시각화**까지 성공적으로 마치셨습니다.
+
+1.  **지금은:** 따로 Classification 코드를 짜지 마세요.
+2.  **대신:** 위에서 알려드린 `pickle` 코드를 추가해서 **K-Means 모델을 저장**하세요.
+3.  **활용:** 저장된 모델을 로드해서 `predict()`를 돌리는 것만으로도 충분히 훌륭한 **Classification 시스템**이 됩니다.
+
+일단 저장 기능을 넣어서 돌려보시고, 나중에 정확도가 너무 안 나온다 싶으면 그때 가서 별도의 분류 모델을 고민해도 늦지 않습니다.
+
+---
+### Question)
+```
+그런데, Classification 과 Clustering 의 차이가 뭐지?
+
+적어도 이 모델에서는, Label (정답) 을 임베딩 생성에 활용하지 않는데, 그러한 측면에서 바라본다면, 두 개 차이가 있나?
+```
+### Answer)
+**핵심적인 차이**는 **"기준(Standard)을 누가 만드느냐"**에 있습니다.
+
+사용자님 말씀대로 TimeKD 임베딩 자체에는 라벨(정답) 정보가 전혀 없기 때문에, 이 상황에서는 두 작업의 경계가 매우 모호해 보일 수 있습니다. 하지만 **작업의 목적(Goal)**과 **흐름(Flow)**에서 분명한 차이가 있습니다.
+
+
+
+[Image of comparison between classification and clustering diagrams]
+
+
+사용자님의 상황(**TimeKD, No Labels**)에 맞춰서 이 차이를 설명해 드리겠습니다.
+
+---
+
+### 1. 기준(Class)을 만드는 과정: Clustering
+* **상황:** 아무런 정답이 없는 상태입니다.
+* **역할:** 데이터들의 거리를 재보고, **"너네끼리 좀 비슷하네? 너희를 1번 그룹이라고 부르자"**라고 **기준을 새로 만드는(Creation)** 작업입니다.
+* **비유:** 무인도에 처음 간 사람이 처음 보는 과일들을 모아놓고 "이건 빨간 것들", "이건 파란 것들"이라고 **자기 마음대로 분류 체계를 만드는 것**과 같습니다.
+* **사용자님의 경우:** `KMeans.fit()`을 하는 순간이 바로 Clustering입니다.
+
+### 2. 기준에 따라 판단하는 과정: Classification
+* **상황:** 이제 '1번 그룹', '2번 그룹'이라는 **기준(Label)이 생긴 상태**입니다. (비록 그 기준을 사람이 아니라 기계가 만들었을지라도요.)
+* **역할:** 새로운 데이터가 들어왔을 때, **"너는 아까 만든 1번 기준이랑 비슷하네? 너는 1번이야"**라고 **판정(Decision)**하는 작업입니다.
+* **비유:** 과일 분류 체계가 생긴 뒤, 새로운 과일을 주웠을 때 **"이건 빨간 과일 통에 넣어야겠네"**라고 결정하는 것입니다.
+* **사용자님의 경우:** `KMeans.predict()`를 하는 순간, 혹은 이 라벨로 XGBoost를 학습시키는 순간이 바로 Classification입니다.
+
+---
+
+### 💡 사용자님 모델 관점에서의 결론
+
+**"임베딩에 라벨을 안 썼는데 무슨 차이냐?"** 라는 질문에 대한 답은 다음과 같습니다.
+
+1.  **데이터 관점에서는 차이가 없습니다.**
+    * 둘 다 똑같은 `TimeKD 임베딩`($X$)을 입력으로 씁니다. 라벨($Y$)은 외부에서 주어지지 않았습니다.
+2.  **프로세스 관점에서는 '선후 관계'입니다.**
+    * **Clustering이 먼저**입니다. 라벨이 없으니까 **만들어내는 단계**입니다.
+    * **Classification은 나중**입니다. 만들어진 라벨을 **써먹는 단계**입니다.
+
+**요약하자면:**
+사용자님의 프로젝트에서 **Clustering은 "정답지를 만드는 과정(Label Generation)"**이고, **Classification은 "그 정답지로 시험을 치는 과정(Prediction)"**입니다.
+
+그래서 제가 앞서 **"굳이 따로 구현할 필요 없다"**고 말씀드린 이유는, **K-Means 알고리즘 하나가 '정답지 만들기(fit)'와 '시험 치기(predict)' 기능을 동시에 가지고 있기 때문**입니다.
+
+---
+### Question)
+```
+요약식으로 말하면
+비지도 학습이라 Classification 태스크를 수행하기 부적절하다 이거 아닌가
+```
+### Answer)
+네, **정확하게 보셨습니다.** 요약하자면 다음과 같습니다.
+
+1.  **원칙적으로 불가능:** "Classification(분류)"은 **정답(Label)**을 맞추는 작업인데, 정답이 없으니 애초에 성립할 수 없는 태스크입니다.
+2.  **그래서 우회함:** 정답이 없으니 **"비슷한 것끼리 묶는(Clustering)"** 방식으로 문제를 푼 것입니다.
+3.  **결론:** 누군가 "왜 Classification 안 했어?"라고 묻는다면, **"비지도 학습 환경이라 정답지가 없어서 Clustering으로 접근했다"**라고 답변하시면 완벽합니다.
+
+즉, **"Classification을 못한 게 아니라, 데이터 특성상 Clustering이 맞는 방법이었다"**가 핵심 논리입니다.
