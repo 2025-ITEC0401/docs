@@ -164,3 +164,21 @@ if __name__ == "__main__":
 ```bash
 pip install scikit-learn
 ```
+
+### Question)
+```
+그런데, 이 코드를 수행하니 아래의 에러가 발생함.
+Traceback (most recent call last):
+  File "/hdd/intern/z_timeKD_downstream_task/downstream/forecasting.py", line 388, in <module>
+    main()
+  File "/hdd/intern/z_timeKD_downstream_task/downstream/forecasting.py", line 380, in main
+    final_r2 = r2_score(reals_np, preds_np)
+NameError: name 'r2_score' is not defined
+Traceback (most recent call last):
+  File "/hdd/intern/z_timeKD_downstream_task/downstream/forecasting.py", line 388, in <module>
+    main()
+  File "/hdd/intern/z_timeKD_downstream_task/downstream/forecasting.py", line 380, in main
+    final_r2 = r2_score(reals_np, preds_np)
+NameError: name 'r2_score' is not defined
+```
+### Answer)
