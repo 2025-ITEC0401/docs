@@ -26,3 +26,25 @@ A: PEFT(Parameter-Efficient Fine-Tuning) 기법과 **지식 증류(Knowledge Dis
 LLM 전체를 학습시키는 것은 불가능하므로, **LoRA(Low-Rank Adaptation)**나 Adapter 방식을 사용하여 훈련 파라미터 수를 0.1% 수준으로 줄여야 합니다.
 
 또는, 거대 모델(Nexus Oracle)은 추론만 하여 '정답지(Soft label)'를 만들고, 실제 서비스용 모델(Prism Core)은 PatchTST 같은 가벼운 모델로 만들어 거대 모델의 지식을 배우게 하는(Distillation) 전략이 현실적입니다.
+
+1. PyTorch 모델 클래스(nn.Module) 안에서 '공유 백본(Shared Backbone)'과 '개별 헤드(Separate Heads)'를 어떻게 구성해야 데이터 흐름이 꼬이지 않을까?
+
+A: __init__에서는 인코더를 하나만 정의하고, 헤드를 별도로 정의합니다. 핵심은 forward 함수에서의 **분기(Branching)**입니다.
+
+구조: self.encoder (PatchTST Backbone)는 하나만 존재합니다. self.head_forecast (Linear)와 self.head_class (Pooling + Linear)를 따로 만듭니다.
+
+흐름: forward(x) 함수에서 먼저 z = self.encoder(x)로 잠재 표현(Latent Representation)을 얻습니다. 그 후 이 z를 두 헤드에 각각 통과시킵니다.
+
+Python
+
+# 예시 코드
+def forward(self, x):
+    # 1. 공통 인코딩
+    z = self.encoder(x) # Shape: [Batch, Patch_Num, D_model]
+    # 2. 예측 태스크 (Flatten -> Linear)
+    pred_out = self.head_forecast(z.flatten(1))
+    # 3. 분류 태스크 (Pooling -> Linear)
+    cls_feat = z.mean(dim=1) # Global Average Pooling
+    cls_out = self.head_class(cls_feat)
+    return pred_out, cls_out
+```
