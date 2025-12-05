@@ -12,6 +12,17 @@ A: 가장 큰 난제는 **도메인 이동(Domain Shift)**과 다양한 주기(F
 
 가변 패치: 고정된 패치 길이 대신 다양한 크기의 패치를 동시에 학습(Multi-scale patching)하여 다양한 패턴을 포착해야 합니다.
 
+
+
 Q. 하나의 임베딩으로 예측(Forecasting), 분류(Classification), 이상 탐지(Anomaly Detection)를 모두 수행하려면 아키텍처를 어떻게 구성해야 하는가? 
 
 A: [Pre-training] -> [Universal Embedding] -> [Lightweight Heads] 구조가 필요합니다.백본(Backbone): PatchTST나 LLM 기반 인코더를 사용하여 데이터의 문맥을 압축한 고차원 벡터(z)를 생성합니다. 이때 인코더는 특정 태스크에 종속되지 않도록 마스킹(Masking)이나 대조 학습(Contrastive Learning)으로 훈련합니다.헤드(Heads): 생성된 임베딩 $z$ 위에 태스크별로 아주 얇은 레이어(Linear Layer 등)만 붙입니다.예측: $z \rightarrow$ Linear $\rightarrow$ 미래 시점 값분류: $z \rightarrow$ Pooling $\rightarrow$ Linear $\rightarrow$ 클래스 확률이상 탐지: $z \rightarrow$ Reconstruction $\rightarrow$ 입력과의 차이 계산
+
+
+Q. 학부생/석사생 수준의 자원(GPU)으로 aLLM4TS 같은 거대 모델 기반 프레임워크를 효율적으로 실험하려면?
+
+A: PEFT(Parameter-Efficient Fine-Tuning) 기법과 **지식 증류(Knowledge Distillation)**를 적극 활용해야 합니다.
+
+LLM 전체를 학습시키는 것은 불가능하므로, **LoRA(Low-Rank Adaptation)**나 Adapter 방식을 사용하여 훈련 파라미터 수를 0.1% 수준으로 줄여야 합니다.
+
+또는, 거대 모델(Nexus Oracle)은 추론만 하여 '정답지(Soft label)'를 만들고, 실제 서비스용 모델(Prism Core)은 PatchTST 같은 가벼운 모델로 만들어 거대 모델의 지식을 배우게 하는(Distillation) 전략이 현실적입니다.
