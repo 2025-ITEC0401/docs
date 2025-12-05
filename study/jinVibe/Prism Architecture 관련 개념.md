@@ -56,3 +56,8 @@ A: 맞습니다. 예측은 **'지역적이고 세밀한 변화(Local details)'**
 분류 헤드: 전체 시퀀스의 정보를 압축하는 Global Average Pooling이나 Max Pooling을 사용하여 인코더가 전체 맥락을 보도록 유도합니다.
 
 예측 헤드: 모든 패치의 정보를 살려야 하므로 Pooling 없이 Flatten 하거나, 마지막 패치(Last Patch)에 가중치를 더 주는 방식을 사용합니다.
+
+
+Q. 두 태스크의 손실 함수(Loss Function) 단위가 다른데, 어떻게 하나로 합쳐서 역전파(Backpropagation)를 시켜야 할까?
+
+A: 가중 합(Weighted Sum) 손실 함수를 설계해야 합니다. 예측은 주로 MSE(평균 제곱 오차), 분류는 Cross-Entropy를 사용합니다.$$Loss_{total} = \lambda_1 \cdot MSE(y_{pred}, y_{true}) + \lambda_2 \cdot CE(c_{pred}, c_{true})$$여기서 $\lambda$(람다)는 하이퍼파라미터입니다. 초기에는 예측 손실값이 분류 손실값보다 훨씬 클 수 있으므로, 두 손실값의 스케일(Scale)을 비슷하게 맞춰주는 튜닝이 필요합니다. (예: 예측 Loss가 100이고 분류 Loss가 1이면, $\lambda_1=0.01$로 설정)
