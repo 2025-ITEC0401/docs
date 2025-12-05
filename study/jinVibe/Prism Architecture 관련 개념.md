@@ -11,3 +11,7 @@ A: 가장 큰 난제는 **도메인 이동(Domain Shift)**과 다양한 주기(F
 주파수 도메인 활용: 시간 도메인뿐만 아니라 Fourier Transform 등을 통해 주파수 도메인 특징을 함께 학습하면 주기성이 다른 데이터에 더 강건해질 수 있습니다.
 
 가변 패치: 고정된 패치 길이 대신 다양한 크기의 패치를 동시에 학습(Multi-scale patching)하여 다양한 패턴을 포착해야 합니다.
+
+Q. 하나의 임베딩으로 예측(Forecasting), 분류(Classification), 이상 탐지(Anomaly Detection)를 모두 수행하려면 아키텍처를 어떻게 구성해야 하는가? 
+
+A: [Pre-training] -> [Universal Embedding] -> [Lightweight Heads] 구조가 필요합니다.백본(Backbone): PatchTST나 LLM 기반 인코더를 사용하여 데이터의 문맥을 압축한 고차원 벡터(z)를 생성합니다. 이때 인코더는 특정 태스크에 종속되지 않도록 마스킹(Masking)이나 대조 학습(Contrastive Learning)으로 훈련합니다.헤드(Heads): 생성된 임베딩 $z$ 위에 태스크별로 아주 얇은 레이어(Linear Layer 등)만 붙입니다.예측: $z \rightarrow$ Linear $\rightarrow$ 미래 시점 값분류: $z \rightarrow$ Pooling $\rightarrow$ Linear $\rightarrow$ 클래스 확률이상 탐지: $z \rightarrow$ Reconstruction $\rightarrow$ 입력과의 차이 계산
