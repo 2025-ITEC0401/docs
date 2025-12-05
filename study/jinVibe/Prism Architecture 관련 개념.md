@@ -27,7 +27,7 @@ LLM 전체를 학습시키는 것은 불가능하므로, **LoRA(Low-Rank Adaptat
 
 또는, 거대 모델(Nexus Oracle)은 추론만 하여 '정답지(Soft label)'를 만들고, 실제 서비스용 모델(Prism Core)은 PatchTST 같은 가벼운 모델로 만들어 거대 모델의 지식을 배우게 하는(Distillation) 전략이 현실적입니다.
 
-1. PyTorch 모델 클래스(nn.Module) 안에서 '공유 백본(Shared Backbone)'과 '개별 헤드(Separate Heads)'를 어떻게 구성해야 데이터 흐름이 꼬이지 않을까?
+Q. PyTorch 모델 클래스(nn.Module) 안에서 '공유 백본(Shared Backbone)'과 '개별 헤드(Separate Heads)'를 어떻게 구성해야 데이터 흐름이 꼬이지 않을까?
 
 A: __init__에서는 인코더를 하나만 정의하고, 헤드를 별도로 정의합니다. 핵심은 forward 함수에서의 **분기(Branching)**입니다.
 
@@ -48,3 +48,11 @@ def forward(self, x):
     cls_out = self.head_class(cls_feat)
     return pred_out, cls_out
 ```
+
+Q. 예측(Forecasting)과 분류(Classification)는 요구하는 임베딩의 성격이 다른데, 인코더가 혼란스러워하지 않을까? (Negative Transfer 문제)
+
+A: 맞습니다. 예측은 **'지역적이고 세밀한 변화(Local details)'**가 중요하고, 분류는 **'전체적인 형상과 특징(Global shape)'**이 중요합니다. 이를 해결하기 위해 헤드 디자인을 차별화해야 합니다.
+
+분류 헤드: 전체 시퀀스의 정보를 압축하는 Global Average Pooling이나 Max Pooling을 사용하여 인코더가 전체 맥락을 보도록 유도합니다.
+
+예측 헤드: 모든 패치의 정보를 살려야 하므로 Pooling 없이 Flatten 하거나, 마지막 패치(Last Patch)에 가중치를 더 주는 방식을 사용합니다.
