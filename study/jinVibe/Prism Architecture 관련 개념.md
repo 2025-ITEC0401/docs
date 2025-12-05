@@ -70,3 +70,18 @@ A: 현실적인 문제입니다. 이때는 **'마스킹된 손실 계산(Masked 
 분류 라벨이 없는 데이터가 들어오면, 해당 배치의 분류 Loss는 0으로 처리하여 그래디언트(Gradient)가 업데이트되지 않도록 막아야 합니다.
 
 코드 레벨에서는 loss_cls = criterion(pred, target) * mask 형태로 구현하여, 라벨이 있는 데이터만 학습에 반영되게 합니다.
+
+
+Q. DataLoader는 한 번에 무엇을 뱉어내야(Return) 하는가?
+
+A: 일반적인 (x, y) 튜플이 아니라, 멀티태스크를 위한 3개 이상의 요소를 반환해야 합니다.
+
+Return: (input_sequence, forecast_target, class_label)
+
+input_sequence: 모델에 들어갈 과거 데이터 (예: 96 step)
+
+forecast_target: 예측 정답지인 미래 데이터 (예: 96 step)
+
+class_label: 해당 시계열의 클래스 (예: 0 또는 1)
+
+이렇게 구성해야 학습 루프(for batch in loader) 한 번 돌 때 두 가지 Loss를 동시에 계산할 수 있습니다.
