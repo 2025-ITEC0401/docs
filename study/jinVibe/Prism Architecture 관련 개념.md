@@ -61,3 +61,12 @@ A: 맞습니다. 예측은 **'지역적이고 세밀한 변화(Local details)'**
 Q. 두 태스크의 손실 함수(Loss Function) 단위가 다른데, 어떻게 하나로 합쳐서 역전파(Backpropagation)를 시켜야 할까?
 
 A: 가중 합(Weighted Sum) 손실 함수를 설계해야 합니다. 예측은 주로 MSE(평균 제곱 오차), 분류는 Cross-Entropy를 사용합니다.$$Loss_{total} = \lambda_1 \cdot MSE(y_{pred}, y_{true}) + \lambda_2 \cdot CE(c_{pred}, c_{true})$$여기서 $\lambda$(람다)는 하이퍼파라미터입니다. 초기에는 예측 손실값이 분류 손실값보다 훨씬 클 수 있으므로, 두 손실값의 스케일(Scale)을 비슷하게 맞춰주는 튜닝이 필요합니다. (예: 예측 Loss가 100이고 분류 Loss가 1이면, $\lambda_1=0.01$로 설정)
+
+
+Q. 하나의 배치(Batch)로 학습할 때, 라벨이 없는 데이터는 어떻게 처리하나? (예: 예측용 데이터는 있는데 분류 라벨이 없는 경우)
+
+A: 현실적인 문제입니다. 이때는 **'마스킹된 손실 계산(Masked Loss Calculation)'**을 사용합니다.
+
+분류 라벨이 없는 데이터가 들어오면, 해당 배치의 분류 Loss는 0으로 처리하여 그래디언트(Gradient)가 업데이트되지 않도록 막아야 합니다.
+
+코드 레벨에서는 loss_cls = criterion(pred, target) * mask 형태로 구현하여, 라벨이 있는 데이터만 학습에 반영되게 합니다.
