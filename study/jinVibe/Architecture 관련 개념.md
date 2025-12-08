@@ -158,3 +158,15 @@ Action:
 이유: PatchTST는 다변량 데이터 [Batch, Seq_Len, Channels]를 채널을 배로 묶어 [Batch * Channels, Seq_Len, 1] 형태로 변환하여 처리합니다.
 
 Action: forward 함수의 첫 부분에서 tensor.reshape나 permute가 의도한 대로 작동하는지 print(x.shape)를 통해 확인하세요. 만약 채널이 섞이면 모델 성능이 급격히 떨어집니다.
+
+
+[하이퍼 파라미터 및 구조]
+"패치 길이(Patch Length)와 스트라이드(Stride)의 관계를 고려했는가?"
+
+이유:
+
+Patch Length: 너무 작으면 지역적 정보가 깨지고 연산량이 늘어나며, 너무 크면 세밀한 정보를 놓칩니다. (보통 16~64 사이 권장)
+
+Stride: 패치 간 겹치는 정도입니다. Stride = Patch Length면 겹치지 않고(Non-overlapping), Stride < Patch Length면 정보가 겹치면서(Overlapping) 데이터 증강 효과가 납니다.
+
+Action: 데이터가 부족하다면 Stride를 줄여서 패치 개수를 늘리는 전략을 사용하세요. 반대로 학습 속도가 너무 느리다면 Stride를 키우세요.
