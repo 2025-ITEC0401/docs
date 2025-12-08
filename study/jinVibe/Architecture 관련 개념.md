@@ -185,3 +185,14 @@ Action: PatchTST 논문에서는 40% 정도의 높은 마스킹 비율을 권장
 이유: 딥러닝 모델을 짰는데, 단순히 **"어제 값을 오늘 값으로 예측(Repeat Last Value)"**하는 것보다 성능이 안 나올 때가 많습니다. 특히 시계열은 Random Walk 특성이 있어 이런 현상이 자주 발생합니다.
 
 Action: 복잡한 모델을 돌리기 전에, Naive Forecast (마지막 관측값 반복) 또는 Linear Model (DLinear)의 성능을 먼저 찍어보고, 내 모델이 이보다는 확실히 나은지(Loss가 낮은지) 확인하세요.
+
+
+"Data Leakage(데이터 누수)가 발생하고 있지는 않은가?"
+
+이유: 시계열 데이터 처리에서 가장 치명적인 실수입니다. 정규화(Scaling)를 할 때 Test 데이터의 정보가 Train 데이터에 섞이거나, 모델이 예측할 때 **미래 시점의 데이터(Look-ahead bias)**를 참조하면 성능이 비정상적으로 좋게 나옵니다.
+
+Action:
+
+Scaler(MinMax, Standard)를 fit 할 때 반드시 Train Set만 사용했는지 확인하세요.
+
+Transformer의 Attention Mask가 미래 정보를 제대로 가리고 있는지(Causal Masking) 확인하세요.
