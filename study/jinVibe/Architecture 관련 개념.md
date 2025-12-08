@@ -110,3 +110,10 @@ Action: print(f"Pred_Loss: {loss_pred.item():.4f}, Class_Loss: {loss_cls.item():
 잘된 예: z.mean(dim=1) (모든 패치 평균) 또는 z.max(dim=1) (가장 강한 특징 추출)
 
 Action: 분류 성능이 안 나오면 Pooling 방식을 바꿔보세요.
+
+
+"역전파(Backpropagation) 시, 인코더(Backbone)의 가중치(Weight)가 실제로 변하고 있는가?"
+
+이유: 코드를 잘못 짜서 loss.backward()가 헤드에만 적용되고 백본까지 전달되지 않는 실수(Graph 끊김)가 흔합니다.
+
+Action: print(model.encoder.layers[0].self_attn.out_proj.weight.grad)를 찍어서 None이나 0이 아닌지 확인하세요.
