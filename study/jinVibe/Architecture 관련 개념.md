@@ -93,3 +93,8 @@ class_label: 해당 시계열의 클래스 (예: 0 또는 1)
 이유: 예측 Loss(MSE)는 보통 0.5~10 사이이고, 분류 Loss(CrossEntropy)는 0.01~2 사이일 수 있습니다. 만약 예측 Loss가 100이고 분류 Loss가 0.1이라면, 모델은 **"분류는 무시하고 예측만 잘하자"**라고 학습해버립니다.
 
 Action: print(f"Pred_Loss: {loss_pred.item():.4f}, Class_Loss: {loss_cls.item():.4f}")를 찍어보고, 두 값이 너무 차이 나면 가중치($\lambda$)를 조절해야 합니다.
+
+
+"학습 초반에 분류 정확도(Accuracy)가 우연한 확률(Random Chance)보다 높게 올라가는가?"
+
+이유: 이진 분류(0/1)라면 50%, 3개 클래스라면 33% 근처에서 맴돌다가 올라가야 합니다. 만약 시작부터 99%라면 라벨링이 잘못되었거나(Data Leakage), 반대로 100 epoch 동안 50%라면 헤드 구조나 학습률(Learning Rate)에 문제가 있는 것입니다.
