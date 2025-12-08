@@ -196,3 +196,14 @@ Action:
 Scaler(MinMax, Standard)를 fit 할 때 반드시 Train Set만 사용했는지 확인하세요.
 
 Transformer의 Attention Mask가 미래 정보를 제대로 가리고 있는지(Causal Masking) 확인하세요.
+
+
+"Loss가 NaN으로 발산하지 않는가?"
+
+이유: 시계열 데이터에는 가끔 결측치(Missing Value)나 극단적인 이상치(Outlier)가 포함되어 있습니다. 또는 fp16 (Mixed Precision) 학습 시 수치 불안정성으로 인해 발생할 수 있습니다.
+
+Action:
+
+데이터 로더에서 torch.isnan(x).any()를 체크하여 결측치가 0으로 채워졌는지 확인하세요.
+
+Learning Rate를 줄여보거나, Gradient Clipping(torch.nn.utils.clip_grad_norm_)을 적용하세요.
