@@ -85,3 +85,11 @@ forecast_target: 예측 정답지인 미래 데이터 (예: 96 step)
 class_label: 해당 시계열의 클래스 (예: 0 또는 1)
 
 이렇게 구성해야 학습 루프(for batch in loader) 한 번 돌 때 두 가지 Loss를 동시에 계산할 수 있습니다.
+
+
+[손실 함수와 학습 안정성]
+"두 태스크의 Loss 스케일(크기)이 서로 엇비슷한지 로그(Log)로 찍어보았는가?"
+
+이유: 예측 Loss(MSE)는 보통 0.5~10 사이이고, 분류 Loss(CrossEntropy)는 0.01~2 사이일 수 있습니다. 만약 예측 Loss가 100이고 분류 Loss가 0.1이라면, 모델은 **"분류는 무시하고 예측만 잘하자"**라고 학습해버립니다.
+
+Action: print(f"Pred_Loss: {loss_pred.item():.4f}, Class_Loss: {loss_cls.item():.4f}")를 찍어보고, 두 값이 너무 차이 나면 가중치($\lambda$)를 조절해야 합니다.
