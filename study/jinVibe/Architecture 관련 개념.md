@@ -170,3 +170,10 @@ Patch Length: 너무 작으면 지역적 정보가 깨지고 연산량이 늘어
 Stride: 패치 간 겹치는 정도입니다. Stride = Patch Length면 겹치지 않고(Non-overlapping), Stride < Patch Length면 정보가 겹치면서(Overlapping) 데이터 증강 효과가 납니다.
 
 Action: 데이터가 부족하다면 Stride를 줄여서 패치 개수를 늘리는 전략을 사용하세요. 반대로 학습 속도가 너무 느리다면 Stride를 키우세요.
+
+
+"마스킹 비율(Masking Ratio)이 적절한가? (사전 학습 시)"
+
+이유: 사전 학습(Self-supervised Learning)에서 마스킹 비율은 매우 중요합니다. 너무 적게 가리면(예: 10%) 모델이 주변만 보고 쉽게 답을 베끼고(Trivial solution), 너무 많이 가리면(예: 90%) 학습 자체가 불가능합니다.
+
+Action: PatchTST 논문에서는 40% 정도의 높은 마스킹 비율을 권장합니다. 15%를 사용하는 NLP(BERT)와 다르다는 점을 명심하고 실험해 보세요.
