@@ -137,3 +137,17 @@ Case B: 멀티 태스크 모델의 예측 MSE = 0.5
 이유: 범용 프레임워크라면 seq_len=96일 때도, seq_len=336일 때도 코드 수정 없이 돌아가야 합니다.
 
 Action: argparse로 seq_len을 바꿔가며 실행해보고, 텐서 차원 불일치(Shape Mismatch) 에러가 안 나는지 확인하세요. (특히 Linear Layer 입력 차원에서 자주 터집니다.)
+
+
+[데이터 전처리 및 정규화]
+"RevIN (Reversible Instance Normalization)을 적용했는가? 그리고 그 위치가 정확한가?"
+
+이유: 시계열 데이터는 통계적 특성(평균, 분산)이 시간에 따라 변하는 **비정상성(Non-stationarity)**을 가집니다. 이를 해결하지 않으면 모델이 데이터의 분포 변화(Distribution Shift)를 학습하지 못해 성능이 망가집니다.
+
+Action:
+
+모델의 **맨 앞단(입력 직후)**에서 정규화(x - mean / std)를 수행하고,
+
+모델의 **맨 뒷단(출력 직전)**에서 역정규화(out * std + mean)를 수행하는 구조인지 확인하세요.
+
+특히 범용 프레임워크에서는 데이터셋마다 스케일이 다르므로 **Instance Normalization(개별 샘플 단위 정규화)**이 필수입니다.
