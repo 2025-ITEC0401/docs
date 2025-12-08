@@ -98,3 +98,15 @@ Action: print(f"Pred_Loss: {loss_pred.item():.4f}, Class_Loss: {loss_cls.item():
 "학습 초반에 분류 정확도(Accuracy)가 우연한 확률(Random Chance)보다 높게 올라가는가?"
 
 이유: 이진 분류(0/1)라면 50%, 3개 클래스라면 33% 근처에서 맴돌다가 올라가야 합니다. 만약 시작부터 99%라면 라벨링이 잘못되었거나(Data Leakage), 반대로 100 epoch 동안 50%라면 헤드 구조나 학습률(Learning Rate)에 문제가 있는 것입니다.
+
+
+[아키텍처 디테일]
+"분류 헤드(Classification Head)에 들어가는 입력 벡터를 만들 때, 모든 패치(Patch)의 정보를 공평하게 사용하고 있는가?"
+
+이유: PatchTST의 출력은 [Batch, Patch_Num, D_model] 형태입니다.
+
+잘못된 예: z[:, -1, :] (마지막 패치만 사용 → 전체 형상 파악 불가)
+
+잘된 예: z.mean(dim=1) (모든 패치 평균) 또는 z.max(dim=1) (가장 강한 특징 추출)
+
+Action: 분류 성능이 안 나오면 Pooling 방식을 바꿔보세요.
