@@ -117,3 +117,16 @@ Action: 분류 성능이 안 나오면 Pooling 방식을 바꿔보세요.
 이유: 코드를 잘못 짜서 loss.backward()가 헤드에만 적용되고 백본까지 전달되지 않는 실수(Graph 끊김)가 흔합니다.
 
 Action: print(model.encoder.layers[0].self_attn.out_proj.weight.grad)를 찍어서 None이나 0이 아닌지 확인하세요.
+
+
+
+[범용성 검증]
+"싱글 태스크(Single-Task) 모델과 성능을 비교했을 때, 멀티 태스크 모델이 '최소한 비슷하거나' 더 좋은가?"
+
+이유: 이것이 **Negative Transfer(부정적 전이)**를 확인하는 가장 중요한 테스트입니다.
+
+Case A: 예측 전용 모델 MSE = 0.3
+
+Case B: 멀티 태스크 모델의 예측 MSE = 0.5
+
+결과: Case B가 훨씬 나쁘다면, 두 태스크가 서로 방해하고 있는 것입니다. 이때는 백본 사이즈를 키우거나 Loss 가중치를 다시 조절해야 합니다.
