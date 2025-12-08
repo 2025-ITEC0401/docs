@@ -151,3 +151,10 @@ Action:
 모델의 **맨 뒷단(출력 직전)**에서 역정규화(out * std + mean)를 수행하는 구조인지 확인하세요.
 
 특히 범용 프레임워크에서는 데이터셋마다 스케일이 다르므로 **Instance Normalization(개별 샘플 단위 정규화)**이 필수입니다.
+
+
+"채널 독립(Channel Independence) 설정 시, 입력 데이터의 차원(Dimension) 변환이 올바르게 이루어지는가?"
+
+이유: PatchTST는 다변량 데이터 [Batch, Seq_Len, Channels]를 채널을 배로 묶어 [Batch * Channels, Seq_Len, 1] 형태로 변환하여 처리합니다.
+
+Action: forward 함수의 첫 부분에서 tensor.reshape나 permute가 의도한 대로 작동하는지 print(x.shape)를 통해 확인하세요. 만약 채널이 섞이면 모델 성능이 급격히 떨어집니다.
