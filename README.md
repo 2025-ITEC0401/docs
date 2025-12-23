@@ -20,18 +20,18 @@
 > **💡 Tip:** `[링크 텍스트](./페이지-이름)` 형식으로 새 위키 페이지를 만들고 연결할 수 있습니다.
 
 - **서형철**
-  - [예시](./Week-01-Setup)
+  - [바로가기](./study/wjdqh6544/)
 
 - **유지훈**
-  - [예시](./Week-04-Advanced-Topic-1)
+  - [바로가기](./study/jihunYu/)
 
 - **이상민**
-  - [예시](./Week-04-Advanced-Topic-1)
+  - [바로가기](./study/wjdqh6544/)
 
 - **진동현**
-  - [예시](./Week-04-Advanced-Topic-1)
+  - [바로가기](./study/jinVibe/)
 
 - **최진혁**
-  - [예시](./Week-04-Advanced-Topic-1)
+  - [바로가기](./study/daniel0406070/)
 
 ---
